@@ -86,6 +86,10 @@ Analytics::Analytics (std::string writeKey, std::string host) : writeKey(writeKe
 
 Analytics::~Analytics () {}
 
+void Analytics::Track (std::string userId, std::string event) {
+  this->Track(userId, event, {});
+}
+
 void Analytics::Track (std::string userId, std::string event, std::map<std::string, std::string> properties) {
   Event *e = new Event(EVENT_TYPE_TRACK);
   e->userId = userId;
@@ -96,6 +100,10 @@ void Analytics::Track (std::string userId, std::string event, std::map<std::stri
 
   delete res;
   delete e;
+}
+
+void Analytics::Identify (std::string userId) {
+  this->Identify(userId, {});
 }
 
 void Analytics::Identify (std::string userId, std::map<std::string, std::string> traits) {
@@ -109,6 +117,10 @@ void Analytics::Identify (std::string userId, std::map<std::string, std::string>
   delete e;
 }
 
+void Analytics::Page (std::string event, std::string userId) {
+  this->Page(event, userId, {});
+}
+
 void Analytics::Page (std::string event, std::string userId, std::map<std::string, std::string> properties) {
   Event *e = new Event(EVENT_TYPE_PAGE);
   e->userId = userId;
@@ -118,6 +130,10 @@ void Analytics::Page (std::string event, std::string userId, std::map<std::strin
 
   delete res;
   delete e;
+}
+
+void Analytics::Screen (std::string event, std::string userId) {
+  this->Screen(event, userId, {});
 }
 
 void Analytics::Screen (std::string event, std::string userId, std::map<std::string, std::string> properties) {
@@ -140,6 +156,10 @@ void Analytics::Alias (std::string previousId, std::string userId) {
 
   delete res;
   delete e;
+}
+
+void Analytics::Group (std::string groupId) {
+  this->Group(groupId);
 }
 
 void Analytics::Group (std::string groupId, std::map<std::string, std::string> properties) {

@@ -22,8 +22,6 @@ typedef enum {
   EVENT_TYPE_ALIAS
 } EventType;
 
-
-
 class Event {
 public:
   Event (EventType type);
@@ -50,11 +48,21 @@ public:
   ~Analytics ();
 
   void Track (std::string userId, std::string event, std::map<std::string, std::string> properties);
+  void Track (std::string userId, std::string event);
+
   void Identify (std::string userId, std::map<std::string, std::string> traits);
+  void Identify (std::string userId);
+
   void Page (std::string event, std::string userId, std::map<std::string, std::string> properties);
+  void Page (std::string event, std::string userId);
+
   void Screen (std::string event, std::string userId, std::map<std::string, std::string> properties);
+  void Screen (std::string event, std::string userId);
+
   void Alias (std::string previousId, std::string userId);
+
   void Group (std::string groupId, std::map<std::string, std::string> properties);
+  void Group (std::string groupId);
 
 private:
   std::string writeKey;
