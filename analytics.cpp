@@ -29,11 +29,8 @@ std::string Event::Type () {
       return "track";
       break;
     default:
-      /* wtf? */
-      ;
+      throw std::invalid_argument("Invalid event type");
   }
-
-  return NULL;
 }
 
 // super dirty JSON serialization... should clean this up
