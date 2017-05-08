@@ -68,23 +68,23 @@ std::string Event::Serialize () {
   return r + "\n}";
 }
 
-Response::Response(){
+Response::Response () {
   this->ok = false;
   this->status = -1;
 }
 
-Response::~Response(){
+Response::~Response () {
   this->data.clear();
 }
 
 
-Analytics::Analytics(std::string writeKey) : writeKey(writeKey) {
+Analytics::Analytics (std::string writeKey) : writeKey(writeKey) {
   host = "https://api.segment.io";
 }
 
-Analytics::Analytics(std::string writeKey, std::string host) : writeKey(writeKey), host(host) {}
+Analytics::Analytics (std::string writeKey, std::string host) : writeKey(writeKey), host(host) {}
 
-Analytics::~Analytics() {}
+Analytics::~Analytics () {}
 
 void Analytics::Track (std::string userId, std::string event, EventProperties properties) {
   Event *e = new Event(EVENT_TYPE_TRACK);
@@ -153,8 +153,7 @@ void Analytics::Group (std::string groupId, EventProperties properties) {
   delete e;
 }
 
-Response *
-Analytics::sendEvent(Event *e) {
+Response * Analytics::sendEvent (Event *e) {
   Response *res = new Response;
   CURL *req = NULL;
   CURLcode c = CURLE_OK;
@@ -205,7 +204,7 @@ Analytics::sendEvent(Event *e) {
   return res;
 }
 
-size_t Analytics::sendEventWriteCallback(void *data, size_t size, size_t nmemb, void *userdata){
+size_t Analytics::sendEventWriteCallback (void *data, size_t size, size_t nmemb, void *userdata) {
   Response* res;
   res = reinterpret_cast<Response *>(userdata);
   res->data.append(reinterpret_cast<char *>(data), size * nmemb);
