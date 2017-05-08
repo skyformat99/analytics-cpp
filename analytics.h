@@ -13,8 +13,6 @@ public:
   std::string data;
 };
 
-typedef std::map<std::string, std::string> EventProperties;
-
 typedef enum {
   EVENT_TYPE_IDENTIFY,
   EVENT_TYPE_TRACK,
@@ -39,7 +37,7 @@ public:
   std::string groupId;
   std::string anonymousId;
   std::string previousId;
-  EventProperties properties;
+  std::map<std::string, std::string> properties;
 
 private:
   EventType type;
@@ -51,12 +49,12 @@ public:
   Analytics (std::string writeKey, std::string host);
   ~Analytics ();
 
-  void Track (std::string userId, std::string event, EventProperties properties);
-  void Identify (std::string userId, EventProperties traits);
-  void Page (std::string event, std::string userId, EventProperties properties);
-  void Screen (std::string event, std::string userId, EventProperties properties);
+  void Track (std::string userId, std::string event, std::map<std::string, std::string> properties);
+  void Identify (std::string userId, std::map<std::string, std::string> traits);
+  void Page (std::string event, std::string userId, std::map<std::string, std::string> properties);
+  void Screen (std::string event, std::string userId, std::map<std::string, std::string> properties);
   void Alias (std::string previousId, std::string userId);
-  void Group (std::string groupId, EventProperties properties);
+  void Group (std::string groupId, std::map<std::string, std::string> properties);
 
 private:
   std::string writeKey;

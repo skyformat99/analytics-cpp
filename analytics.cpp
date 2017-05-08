@@ -45,7 +45,7 @@ std::string Event::Serialize () {
   if (previousId != "") r += ",\n  \"previousId\": \"" + previousId + "\"";
 
   if (!properties.empty()) {
-    EventProperties::iterator itor;
+    std::map<std::string, std::string>::iterator itor;
     int i = 0;
 
     if (this->Type() == "identify") {
@@ -86,7 +86,7 @@ Analytics::Analytics (std::string writeKey, std::string host) : writeKey(writeKe
 
 Analytics::~Analytics () {}
 
-void Analytics::Track (std::string userId, std::string event, EventProperties properties) {
+void Analytics::Track (std::string userId, std::string event, std::map<std::string, std::string> properties) {
   Event *e = new Event(EVENT_TYPE_TRACK);
   e->userId = userId;
   e->event = event;
@@ -98,7 +98,7 @@ void Analytics::Track (std::string userId, std::string event, EventProperties pr
   delete e;
 }
 
-void Analytics::Identify (std::string userId, EventProperties traits) {
+void Analytics::Identify (std::string userId, std::map<std::string, std::string> traits) {
   Event *e = new Event(EVENT_TYPE_IDENTIFY);
   e->userId = userId;
   e->properties = traits;
@@ -109,7 +109,7 @@ void Analytics::Identify (std::string userId, EventProperties traits) {
   delete e;
 }
 
-void Analytics::Page (std::string event, std::string userId, EventProperties properties) {
+void Analytics::Page (std::string event, std::string userId, std::map<std::string, std::string> properties) {
   Event *e = new Event(EVENT_TYPE_PAGE);
   e->userId = userId;
   e->properties = properties;
@@ -120,7 +120,7 @@ void Analytics::Page (std::string event, std::string userId, EventProperties pro
   delete e;
 }
 
-void Analytics::Screen (std::string event, std::string userId, EventProperties properties) {
+void Analytics::Screen (std::string event, std::string userId, std::map<std::string, std::string> properties) {
   Event *e = new Event(EVENT_TYPE_SCREEN);
   e->userId = userId;
   e->properties = properties;
@@ -142,7 +142,7 @@ void Analytics::Alias (std::string previousId, std::string userId) {
   delete e;
 }
 
-void Analytics::Group (std::string groupId, EventProperties properties) {
+void Analytics::Group (std::string groupId, std::map<std::string, std::string> properties) {
   Event *e = new Event(EVENT_TYPE_GROUP);
   e->groupId = groupId;
   e->properties = properties;

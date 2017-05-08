@@ -4,12 +4,7 @@ using namespace segment;
 
 int main () {
   Analytics *analytics = new Analytics("xxx", "http://localhost:55005");
-
-  EventProperties props;
-  props["foo"] = "bar";
-  props["qux"] = "mux";
-  analytics->Track("userId", "Did Something", props);
-
+  analytics->Track("userId", "Did Something", { { "foo", "bar" }, { "qux", "mux" }});
   delete analytics;
   return 0;
 }
