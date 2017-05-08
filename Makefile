@@ -7,6 +7,9 @@ example: example.o analytics.o
 analytics.o: analytics.cpp
 
 clean:
-	rm -rf example example.o
+	rm -rf example example.o analytics.o
 
-.PHONY: clean
+valgrind: example
+	valgrind --leak-check=full --show-reachable=yes ./$<
+
+.PHONY: clean valgrind
