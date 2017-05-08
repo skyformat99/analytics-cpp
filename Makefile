@@ -1,4 +1,4 @@
-CXXFLAGS =
+CXXFLAGS = -std=c++11
 LDFLAGS = -lcurl
 
 example: example.o analytics.o
