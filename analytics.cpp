@@ -177,6 +177,8 @@ Analytics::sendEvent(Event *e) {
 
   #define option(x, y) curl_easy_setopt(req, x, y);
   option(CURLOPT_USERAGENT, "AnalyticsCPP/0.0");
+  option(CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+  option(CURLOPT_USERPWD, this->writeKey.c_str());
   c = option(CURLOPT_HTTPHEADER, headers);
   option(CURLOPT_URL, url.c_str());
   option(CURLOPT_POST, 1);
