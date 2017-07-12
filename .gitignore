@@ -1,3 +1,4 @@
 example
-example.o
-analytics.o
+*.o
+*.sublime-workspace
+tests/test
