@@ -14,6 +14,38 @@
 
 namespace segment {
 
+HttpError::HttpError(int code)
+{
+    this->code = code;
+    (void)snprintf(this->buf, sizeof(this->buf),
+        "HTTP Error %d: %s", code, curl_easy_strerror((CURLcode)code));
+}
+
+const char* HttpError::what() const throw()
+{
+    return (this->buf);
+}
+
+int HttpError::HttpCode() const
+{
+    return (this->code);
+}
+
+SocketError::SocketError()
+{
+    this->os_errno = errno;
+}
+
+SocketError::SocketError(int code)
+{
+    this->os_errno = code;
+}
+
+const char* SocketError::what() const throw()
+{
+    return (strerror(this->os_errno));
+}
+
 Event::Event(EventType type)
     : type(type)
 {
@@ -211,31 +243,70 @@ void Analytics::Group(std::string groupId, std::map<std::string, std::string> pr
     delete e;
 }
 
+class CurlRequest {
+public:
+    CurlRequest();
+    ~CurlRequest();
+
+    CURL* req;
+    struct curl_slist* headers;
+};
+
+CurlRequest::CurlRequest()
+{
+    struct curl_slist* hdrs = NULL;
+
+    this->headers = NULL;
+    if ((this->req = curl_easy_init()) == NULL) {
+        // Best guess...
+        throw SocketError();
+    }
+
+    hdrs = curl_slist_append(this->headers, "Content-Type: application/json");
+    if (hdrs == NULL) {
+        curl_easy_cleanup(this->req);
+        throw SocketError();
+    }
+    this->headers = hdrs;
+    hdrs = curl_slist_append(this->headers, "Accept: application/json");
+    if (hdrs == NULL) {
+        curl_slist_free_all(this->headers);
+        curl_easy_cleanup(this->req);
+        throw SocketError();
+    }
+}
+
+CurlRequest::~CurlRequest()
+{
+    if (this->headers) {
+        curl_slist_free_all(this->headers);
+    }
+    curl_easy_cleanup(this->req);
+}
+
 Response* Analytics::sendEvent(Event* e)
 {
     Response* res = new Response;
     CURL* req = NULL;
     CURLcode c = CURLE_OK;
-    struct curl_slist* headers = NULL;
+    //    struct curl_slist* headers = NULL;
     long status = 0;
+    CurlRequest creq;
+    req = creq.req;
 
+#if 0
     if (!(req = curl_easy_init()))
         return res;
+#endif
 
     std::string url = this->host + "/v1/" + e->Type();
     std::string data = e->Serialize();
-
-    std::cout << "POST " << url << std::endl;
-    std::cout << data << std::endl;
-
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    headers = curl_slist_append(headers, "Accept: application/json");
 
 #define option(x, y) curl_easy_setopt(req, x, y);
     option(CURLOPT_USERAGENT, "AnalyticsCPP/0.0");
     option(CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
     option(CURLOPT_USERPWD, this->writeKey.c_str());
-    c = option(CURLOPT_HTTPHEADER, headers);
+    c = option(CURLOPT_HTTPHEADER, creq.headers);
     option(CURLOPT_URL, url.c_str());
     option(CURLOPT_POST, 1);
     option(CURLOPT_POSTFIELDS, data.c_str());
@@ -250,21 +321,24 @@ Response* Analytics::sendEvent(Event* e)
 
     // set status
     curl_easy_getinfo(req, CURLINFO_RESPONSE_CODE, &status);
+
+    // XXX: We need to toss resources properly...
+    if (status == 0) {
+        long en;
+        curl_easy_getinfo(req, CURLINFO_OS_ERRNO, &en);
+        throw SocketError(static_cast<int>(en));
+    } else if (status != 200) {
+        throw HttpError(static_cast<int>(status));
+    }
+
     res->ok = status == 200 && c != CURLE_ABORTED_BY_CALLBACK;
     res->status = static_cast<int>(status);
-
-    std::cout << "STATUS CODE " << res->status << std::endl;
-    std::cout << res->data << std::endl;
-
-    // cleanup
-    curl_easy_cleanup(req);
-    curl_global_cleanup();
-    curl_slist_free_all(headers);
 
     return res;
 }
 
-size_t Analytics::sendEventWriteCallback(void* data, size_t size, size_t nmemb, void* userdata)
+size_t Analytics::sendEventWriteCallback(
+    void* data, size_t size, size_t nmemb, void* userdata)
 {
     Response* res;
     res = reinterpret_cast<Response*>(userdata);

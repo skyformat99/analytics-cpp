@@ -7,10 +7,33 @@
 // found online at https://opensource.org/licenses/MIT.
 //
 
+#include <exception>
 #include <map>
 #include <string>
 
 namespace segment {
+
+class HttpError : public std::exception {
+
+public:
+    HttpError(int);
+    const char* what() const throw();
+    int HttpCode() const;
+
+private:
+    char buf[128];
+    int code;
+};
+
+class SocketError : public std::exception {
+public:
+    SocketError();
+    SocketError(int);
+    const char* what() const throw();
+
+private:
+    int os_errno;
+};
 
 class Response {
 public:
