@@ -1,13 +1,21 @@
+//
+// Copyright 2017 Segment Inc. <friends@segment.com>
+//
+// This software is supplied under the terms of the MIT License, a
+// copy of which should be located in the distribution where this
+// file was obtained (LICENSE.txt).  A copy of the license may also be
+// found online at https://opensource.org/licenses/MIT.
+//
+
 #include "analytics.h"
 
 using namespace segment;
 
-int main () {
-  //Analytics *analytics = new Analytics("xxx", "http://localhost:55005");
-  auto writeKey = "LpSP8WJmW312Z0Yj1wluUcr76kd4F0xl";
-  auto apiHost = "https://api.segment.io";
-  Analytics *analytics = new Analytics(writeKey, apiHost);
-  analytics->Track("userId", "Did Something", { { "foo", "bar" }, { "qux", "mux" }});
-  delete analytics;
-  return 0;
+int main()
+{
+    auto writeKey = "<your-custom-write-key-here>";
+    auto apiHost = "https://api.segment.io";
+    Analytics analytics(writeKey, apiHost);
+    analytics.Track("userId", "Did Something", { { "foo", "bar" }, { "qux", "mux" } });
+    return 0;
 }
