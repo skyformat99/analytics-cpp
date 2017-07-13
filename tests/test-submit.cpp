@@ -3,7 +3,9 @@
 //
 #include "analytics.h"
 
-#define CATCH_CONFIG_MAIN
+#include <curl/curl.h> // So that we can clean up memory at the end.
+
+#define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 
 using namespace segment;
@@ -68,4 +70,16 @@ TEST_CASE("Submissions to Segment work", "[analytics]")
                 "Connection refused");
         }
     }
+}
+
+int main(int argc, char* argv[])
+{
+    // Technically we don't have to init curl, but doing so ensures that
+    // any global libcurl leaks are blamed on libcurl in valgrind runs.
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+
+    int result = Catch::Session().run(argc, argv);
+
+    curl_global_cleanup();
+    return (result < 0xff ? result : 0xff);
 }

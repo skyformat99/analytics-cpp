@@ -8,6 +8,7 @@
 //
 
 #include "analytics.h"
+#include <cstring>
 #include <curl/curl.h>
 #include <iostream>
 #include <string>
@@ -43,7 +44,7 @@ SocketError::SocketError(int code)
 
 const char* SocketError::what() const throw()
 {
-    return (strerror(this->os_errno));
+    return (std::strerror(this->os_errno));
 }
 
 Event::Event(EventType type)
@@ -131,6 +132,17 @@ Response::~Response()
     this->data.clear();
 }
 
+size_t Response::writeCallback(
+    void* data, size_t size, size_t nmemb, void* userdata)
+{
+    // Arguably we could just discard the data rather than saving it;
+    // nothing is using the response body at present.
+    Response* res;
+    res = reinterpret_cast<Response*>(userdata);
+    res->data.append(reinterpret_cast<char*>(data), size * nmemb);
+    return size * nmemb;
+}
+
 Analytics::Analytics(std::string writeKey)
     : writeKey(writeKey)
 {
@@ -152,15 +164,12 @@ void Analytics::Track(std::string userId, std::string event)
 
 void Analytics::Track(std::string userId, std::string event, std::map<std::string, std::string> properties)
 {
-    Event* e = new Event(EVENT_TYPE_TRACK);
-    e->userId = userId;
-    e->event = event;
-    e->properties = properties; // TODO: probably need to copy this
+    Event e(EVENT_TYPE_TRACK);
+    e.userId = userId;
+    e.event = event;
+    e.properties = properties; // TODO: probably need to copy this
 
-    Response* res = this->sendEvent(e);
-
-    delete res;
-    delete e;
+    this->sendEvent(e);
 }
 
 void Analytics::Identify(std::string userId)
@@ -170,14 +179,11 @@ void Analytics::Identify(std::string userId)
 
 void Analytics::Identify(std::string userId, std::map<std::string, std::string> traits)
 {
-    Event* e = new Event(EVENT_TYPE_IDENTIFY);
-    e->userId = userId;
-    e->properties = traits;
+    Event e(EVENT_TYPE_IDENTIFY);
+    e.userId = userId;
+    e.properties = traits;
 
-    Response* res = this->sendEvent(e);
-
-    delete res;
-    delete e;
+    this->sendEvent(e);
 }
 
 void Analytics::Page(std::string event, std::string userId)
@@ -187,14 +193,11 @@ void Analytics::Page(std::string event, std::string userId)
 
 void Analytics::Page(std::string event, std::string userId, std::map<std::string, std::string> properties)
 {
-    Event* e = new Event(EVENT_TYPE_PAGE);
-    e->userId = userId;
-    e->properties = properties;
+    Event e(EVENT_TYPE_PAGE);
+    e.userId = userId;
+    e.properties = properties;
 
-    Response* res = this->sendEvent(e);
-
-    delete res;
-    delete e;
+    this->sendEvent(e);
 }
 
 void Analytics::Screen(std::string event, std::string userId)
@@ -204,26 +207,20 @@ void Analytics::Screen(std::string event, std::string userId)
 
 void Analytics::Screen(std::string event, std::string userId, std::map<std::string, std::string> properties)
 {
-    Event* e = new Event(EVENT_TYPE_SCREEN);
-    e->userId = userId;
-    e->properties = properties;
+    Event e(EVENT_TYPE_SCREEN);
+    e.userId = userId;
+    e.properties = properties;
 
-    Response* res = this->sendEvent(e);
-
-    delete res;
-    delete e;
+    this->sendEvent(e);
 }
 
 void Analytics::Alias(std::string previousId, std::string userId)
 {
-    Event* e = new Event(EVENT_TYPE_ALIAS);
-    e->userId = userId;
-    e->previousId = previousId;
+    Event e(EVENT_TYPE_ALIAS);
+    e.userId = userId;
+    e.previousId = previousId;
 
-    Response* res = this->sendEvent(e);
-
-    delete res;
-    delete e;
+    this->sendEvent(e);
 }
 
 void Analytics::Group(std::string groupId)
@@ -233,14 +230,11 @@ void Analytics::Group(std::string groupId)
 
 void Analytics::Group(std::string groupId, std::map<std::string, std::string> properties)
 {
-    Event* e = new Event(EVENT_TYPE_GROUP);
-    e->groupId = groupId;
-    e->properties = properties;
+    Event e(EVENT_TYPE_GROUP);
+    e.groupId = groupId;
+    e.properties = properties;
 
-    Response* res = this->sendEvent(e);
-
-    delete res;
-    delete e;
+    this->sendEvent(e);
 }
 
 class CurlRequest {
@@ -284,23 +278,17 @@ CurlRequest::~CurlRequest()
     curl_easy_cleanup(this->req);
 }
 
-Response* Analytics::sendEvent(Event* e)
+void Analytics::sendEvent(Event& e)
 {
-    Response* res = new Response;
+    Response res;
     CURL* req = NULL;
     CURLcode c = CURLE_OK;
-    //    struct curl_slist* headers = NULL;
     long status = 0;
     CurlRequest creq;
     req = creq.req;
 
-#if 0
-    if (!(req = curl_easy_init()))
-        return res;
-#endif
-
-    std::string url = this->host + "/v1/" + e->Type();
-    std::string data = e->Serialize();
+    std::string url = this->host + "/v1/" + e.Type();
+    std::string data = e.Serialize();
 
 #define option(x, y) curl_easy_setopt(req, x, y);
     option(CURLOPT_USERAGENT, "AnalyticsCPP/0.0");
@@ -311,18 +299,19 @@ Response* Analytics::sendEvent(Event* e)
     option(CURLOPT_POST, 1);
     option(CURLOPT_POSTFIELDS, data.c_str());
     option(CURLOPT_POSTFIELDSIZE, data.size());
-    option(CURLOPT_WRITEFUNCTION, this->sendEventWriteCallback);
-    option(CURLOPT_WRITEDATA, res);
+    option(CURLOPT_WRITEFUNCTION, res.writeCallback);
+    option(CURLOPT_WRITEDATA, &res);
     option(CURLOPT_HEADERDATA, res);
 #undef option
 
     // make request
     c = curl_easy_perform(req);
 
-    // set status
+    // get status
     curl_easy_getinfo(req, CURLINFO_RESPONSE_CODE, &status);
 
-    // XXX: We need to toss resources properly...
+    // Note that one of the significant drawbacks of libcurl is
+    // that we don't have an easy way to cleanup libcurl's global state.
     if (status == 0) {
         long en;
         curl_easy_getinfo(req, CURLINFO_OS_ERRNO, &en);
@@ -330,19 +319,5 @@ Response* Analytics::sendEvent(Event* e)
     } else if (status != 200) {
         throw HttpError(static_cast<int>(status));
     }
-
-    res->ok = status == 200 && c != CURLE_ABORTED_BY_CALLBACK;
-    res->status = static_cast<int>(status);
-
-    return res;
-}
-
-size_t Analytics::sendEventWriteCallback(
-    void* data, size_t size, size_t nmemb, void* userdata)
-{
-    Response* res;
-    res = reinterpret_cast<Response*>(userdata);
-    res->data.append(reinterpret_cast<char*>(data), size * nmemb);
-    return size * nmemb;
 }
 }

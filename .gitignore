@@ -2,3 +2,4 @@ example
 *.o
 *.sublime-workspace
 tests/test
+build

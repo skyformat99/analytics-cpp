@@ -43,6 +43,7 @@ public:
     bool ok;
     int status;
     std::string data;
+    static size_t writeCallback(void*, size_t, size_t, void*);
 };
 
 typedef enum {
@@ -101,8 +102,7 @@ private:
     std::string host;
     std::string userUage;
 
-    Response* sendEvent(Event* e);
-    static size_t sendEventWriteCallback(void* data, size_t size, size_t nmemb, void* userdata);
+    void sendEvent(Event& e);
 };
 
 } // segment
