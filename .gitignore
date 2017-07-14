@@ -3,3 +3,5 @@ example
 *.sublime-workspace
 tests/test
 build
+lxbuild
+winbuild

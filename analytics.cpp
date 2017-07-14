@@ -301,7 +301,7 @@ void Analytics::sendEvent(Event& e)
     option(CURLOPT_POSTFIELDSIZE, data.size());
     option(CURLOPT_WRITEFUNCTION, res.writeCallback);
     option(CURLOPT_WRITEDATA, &res);
-    option(CURLOPT_HEADERDATA, res);
+    option(CURLOPT_HEADERDATA, &res);
 #undef option
 
     // make request
