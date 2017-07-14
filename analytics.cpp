@@ -8,10 +8,21 @@
 //
 
 #include "analytics.h"
+
+#include "json.hpp"
+
 #include <cstring>
-#include <curl/curl.h>
 #include <iostream>
 #include <string>
+
+#include <curl/curl.h>
+
+// To keep this simple, we include the entire implementation in this one
+// C++ file.  Organizationally we'd probably have rather split this up,
+// but having a single file to integrate makes it easier to integrate
+// into other projects.
+
+using json = nlohmann::json;
 
 namespace segment {
 
@@ -83,42 +94,32 @@ std::string Event::Type()
 // super dirty JSON serialization... should clean this up
 std::string Event::Serialize()
 {
-    std::string r = "{\n";
+    json j;
 
-    r += "  \"type\": \"" + this->Type() + "\"";
-    if (event != "")
-        r += ",\n  \"event\": \"" + event + "\"";
-    if (userId != "")
-        r += ",\n  \"userId\": \"" + userId + "\"";
-    if (groupId != "")
-        r += ",\n  \"groupId\": \"" + groupId + "\"";
-    if (anonymousId != "")
-        r += ",\n  \"anonymousId\": \"" + anonymousId + "\"";
-    if (previousId != "")
-        r += ",\n  \"previousId\": \"" + previousId + "\"";
-
-    if (!properties.empty()) {
-        std::map<std::string, std::string>::iterator itor;
-        int i = 0;
-
-        if (this->Type() == "identify") {
-            r += ",\n  \"traits\": {";
-        } else {
-            r += ",\n  \"properties\": {";
-        }
-        for (itor = properties.begin(); itor != properties.end(); itor++, i++) {
-            if (i > 0) {
-                r += ",";
-            }
-
-            std::string key = itor->first;
-            std::string value = itor->second;
-            r += "\n    \"" + key + "\": \"" + value + "\"";
-        }
-        r += "\n  }";
+    j["type"] = this->Type();
+    if (event != "") {
+        j["event"] = event;
     }
-
-    return r + "\n}";
+    if (userId != "") {
+        j["userId"] = userId;
+    }
+    if (groupId != "") {
+        j["groupId"] = groupId;
+    }
+    if (anonymousId != "") {
+        j["anonymousId"] = anonymousId;
+    }
+    if (previousId != "") {
+        j["previousId"] = previousId;
+    }
+    if (!properties.empty()) {
+        if (this->Type() == "identify") {
+            j["traits"] = properties;
+        } else {
+            j["properties"] = properties;
+        }
+    }
+    return (j.dump());
 }
 
 Response::Response()

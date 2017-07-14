@@ -16,6 +16,6 @@ int main()
     auto writeKey = "<your-custom-write-key-here>";
     auto apiHost = "https://api.segment.io";
     Analytics analytics(writeKey, apiHost);
-    analytics.Track("userId", "Did Something", { { "foo", "bar" }, { "qux", "mux" } });
+    analytics.Track("joeUser", "Did Something", { { "foo", "bar" }, { "qux", "mux" } });
     return 0;
 }

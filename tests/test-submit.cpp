@@ -26,8 +26,8 @@ TEST_CASE("Submissions to Segment work", "[analytics]")
 
         THEN("we can submit tracked events")
         {
-            REQUIRE_NOTHROW(analytics.Track("userId", "Did Something",
-                { { "foo", "bar" }, { "qux", "mux" } }));
+            REQUIRE_NOTHROW(analytics.Track("humptyDumpty", "Sat On A Wall",
+                { { "crown", "broken" }, { "kingsHorses", "NoHelp" }, { "kingsMen", "NoHelp" } }));
         }
     }
 
