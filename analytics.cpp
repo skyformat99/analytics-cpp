@@ -158,6 +158,22 @@ Analytics::Analytics(std::string writeKey, std::string host)
 
 Analytics::~Analytics() {}
 
+// XXX: when we start batching events, we will want to to ensure that
+// analytics kicks off a flush event.
+void Analytics::Flush(bool wait)
+{
+    return;
+}
+
+void Analytics::SetHandler(std::shared_ptr<HttpHandler> h)
+{
+}
+
+std::shared_ptr<HttpHandler> Analytics::Handler()
+{
+    return this->handler;
+}
+
 void Analytics::Track(std::string userId, std::string event)
 {
     this->Track(userId, event, {});

@@ -1,8 +1,14 @@
 {
     "files.associations": {
         "string": "cpp",
-        "system_error": "cpp"
+        "system_error": "cpp",
+        "analytics.cpp": "c",
+        "curl.h": "c",
+        "typecheck-gcc.h": "c",
+        "analytics.h": "c",
+        "exception": "c"
     },
     "editor.formatOnSave": true,
-    "clang-format.style": "WebKit"
+    "clang-format.style": "WebKit",
+    "workbench.colorTheme": "Gloom"
 }
