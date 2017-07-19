@@ -17,10 +17,12 @@ namespace segment {
 
 class HttpHandlerNone : public HttpHandler {
 public:
-    void Handle(const HttpRequest&, HttpResponse&)
+    std::shared_ptr<HttpResponse> Handle(const HttpRequest&)
     {
-        resp.Code = 0;
-        resp.Message = "Unimplemented.";
+        auto resp = std::make_shared<HttpResp>();
+        resp->Code = 0;
+        resp->Message = "Unimplemented.";
+        return resp;
     };
 };
 

@@ -6,7 +6,8 @@
         "curl.h": "c",
         "typecheck-gcc.h": "c",
         "analytics.h": "c",
-        "exception": "c"
+        "exception": "c",
+        "ios": "cpp"
     },
     "editor.formatOnSave": true,
     "clang-format.style": "WebKit",

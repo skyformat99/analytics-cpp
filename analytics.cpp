@@ -165,15 +165,6 @@ void Analytics::Flush(bool wait)
     return;
 }
 
-void Analytics::SetHandler(std::shared_ptr<HttpHandler> h)
-{
-}
-
-std::shared_ptr<HttpHandler> Analytics::Handler()
-{
-    return this->handler;
-}
-
 void Analytics::Track(std::string userId, std::string event)
 {
     this->Track(userId, event, {});

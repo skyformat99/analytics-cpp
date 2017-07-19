@@ -140,7 +140,7 @@ public:
     // synchronous, but Segment always performs this operation from
     // a context where this is safe.  (XXX: This may not be true today,
     // but it will be when we start performing batched requests.)
-    virtual void Handle(const HttpRequest&, HttpResponse&) = 0;
+    virtual std::shared_ptr<HttpResponse> Handle(const HttpRequest&) = 0;
 };
 
 class Analytics {
@@ -156,16 +156,8 @@ public:
     // application to ensure that all events of interest are uploaded.
     void Flush(bool wait);
 
-    // SetHandler allows for a different handler object to be registered.
-    // In this case the Analytics object will route HTTP requests through
-    // the function.
-    void SetHandler(std::shared_ptr<HttpHandler>);
-
-    // DefaultHandler returns the default handler.  Normally this is
-    // just a reference to a static implementation based on libcurl,
-    // but if this library was compiled without CURL support it may
-    // be a function that does nothing.
-    std::shared_ptr<HttpHandler> Handler();
+    // Handler is the backend HTTP transport handler.
+    std::shared_ptr<HttpHandler> Handler;
 
     void Track(std::string userId, std::string event, std::map<std::string, std::string> properties);
     void Track(std::string userId, std::string event);
@@ -188,7 +180,6 @@ private:
     std::string writeKey;
     std::string host;
     std::string userUage;
-    std::shared_ptr<HttpHandler> handler;
 
     void sendEvent(Event& e);
 };

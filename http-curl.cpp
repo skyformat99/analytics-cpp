@@ -60,7 +60,7 @@ public:
         }
     }
 
-    void addHeader(std::string key, std::string value)
+    void addHeader(const std::string key, const std::string value)
     {
         struct curl_slist* hdrs;
         std::string line;
@@ -90,7 +90,7 @@ public:
         return (nbytes);
     }
 
-    void perform(std::string meth, std::string url)
+    void perform(const std::string meth, const std::string url)
     {
         CURL* req;
         CURLcode rv;
@@ -107,9 +107,13 @@ public:
             throw std::bad_alloc();
         }
 
-#define setopt(k, v)                                      \
-    if ((rv = curl_easy_setopt(req, k, v)) != CURLE_OK) { \
-        throw curlExcept(rv);                             \
+#define setopt(k, v)                                        \
+    if ((rv = curl_easy_setopt(req, k, v)) != CURLE_OK) {   \
+        if (rv == CURLE_OUT_OF_MEMORY) {                    \
+            throw std::bad_alloc();                         \
+        } else {                                            \
+            throw std::invalid_argument("bad curl option"); \
+        }                                                   \
     }
 
         std::string body(this->body.begin(), this->body.end());
@@ -124,12 +128,20 @@ public:
         setopt(CURLOPT_WRITEDATA, this);
 
         if ((rv = curl_easy_perform(req)) != CURLE_OK) {
-            throw curlExcept(rv);
+            if (rv == CURLE_OUT_OF_MEMORY) {
+                throw std::bad_alloc();
+            } else {
+                throw curlExcept(rv);
+            }
         }
 
-#define getinfo(k, v)                                      \
-    if ((rv = curl_easy_getinfo(req, k, v)) != CURLE_OK) { \
-        throw curlExcept(rv);                              \
+#define getinfo(k, v)                                         \
+    if ((rv = curl_easy_getinfo(req, k, v)) != CURLE_OK) {    \
+        if (rv == CURLE_OUT_OF_MEMORY) {                      \
+            throw std::bad_alloc();                           \
+        } else {                                              \
+            throw std::invalid_argument("bad curl info arg"); \
+        }                                                     \
     }
 
         // get status
@@ -150,7 +162,8 @@ public:
     // but we're leaving this here in the implementation, so it should
     // be fine.  These are used by the HttpHandlerCurl class.
 
-    std::vector<char> respData;
+    std::vector<char>
+        respData;
     std::string respMessage;
     int respCode;
 
@@ -160,9 +173,10 @@ private:
     CURL* req;
 };
 
-void HttpHandlerCurl::Handle(const HttpRequest& req, HttpResponse& resp)
+std::shared_ptr<HttpResponse> HttpHandlerCurl::Handle(const HttpRequest& req)
 {
 
+    auto resp = std::make_shared<HttpResponse>();
     try {
         curlReq creq;
 
@@ -172,14 +186,16 @@ void HttpHandlerCurl::Handle(const HttpRequest& req, HttpResponse& resp)
 
         creq.setBody(req.Body);
         creq.perform("POST", req.URL);
-        resp.Code = creq.respCode;
-        resp.Message = creq.respMessage;
-        resp.Body = creq.respData;
+        resp->Code = creq.respCode;
+        resp->Message = creq.respMessage;
+        resp->Body = creq.respData;
         // Now start adding request details.
-    } catch (std::exception e) {
-        resp.Code = 0;
-        resp.Message = e.what();
+    } catch (std::exception& e) {
+        resp->Code = 0;
+        resp->Message = e.what();
     }
+
+    return resp;
 }
 
 } // namespace segment

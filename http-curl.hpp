@@ -18,7 +18,7 @@ class HttpHandlerCurl : public HttpHandler {
 public:
     ~HttpHandlerCurl();
     HttpHandlerCurl();
-    void Handle(const HttpRequest& req, HttpResponse& resp);
+    std::shared_ptr<HttpResponse> Handle(const HttpRequest& req);
 };
 
 }; // namespace segment
