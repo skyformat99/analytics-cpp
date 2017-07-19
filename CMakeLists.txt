@@ -7,7 +7,7 @@
 # found online at https://opensource.org/licenses/MIT.
 #
 
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required (VERSION 3.1)
 project(analytics-cpp CXX)
 
 # We require C++ 11.
