@@ -26,29 +26,8 @@ public:
     int HttpCode() const;
 
 private:
-    char buf[128];
+    std::string msg;
     int code;
-};
-
-class SocketError : public std::exception {
-public:
-    SocketError();
-    SocketError(int);
-    const char* what() const throw();
-
-private:
-    int os_errno;
-};
-
-class Response {
-public:
-    Response();
-    ~Response();
-
-    bool ok;
-    int status;
-    std::string data;
-    static size_t writeCallback(void*, size_t, size_t, void*);
 };
 
 typedef enum {
@@ -99,7 +78,7 @@ public:
     // serialized JSON.  This will generally be reasonably small, and
     // never larger than about 512k as Segment prohibits uploading
     // more data than that in a single POST.
-    std::vector<char> Body;
+    std::string Body;
 };
 
 class HttpResponse {
@@ -123,7 +102,7 @@ public:
     // Body is the response body, if a payload was returned.
     // Nothing actually uses this at present, and at present the
     // Segment API returns an empty body anyway.
-    std::vector<char> Body;
+    std::string Body;
 };
 
 // HttpHandler is an abstract class for handling HTTP.  Note that
@@ -134,7 +113,7 @@ public:
 // begin using more fully featured handles.
 class HttpHandler {
 public:
-    virtual ~HttpHandler();
+    virtual ~HttpHandler(){};
     // Handle taks a request and turns it into a response, generally
     // by posting it to the Segment API service.  This API is strictly
     // synchronous, but Segment always performs this operation from

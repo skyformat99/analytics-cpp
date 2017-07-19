@@ -15,7 +15,8 @@
 #include <iostream>
 #include <string>
 
-#include <curl/curl.h>
+#include "http-curl.hpp"
+#include "http-none.hpp"
 
 // To keep this simple, we include the entire implementation in this one
 // C++ file.  Organizationally we'd probably have rather split this up,
@@ -29,33 +30,17 @@ namespace segment {
 HttpError::HttpError(int code)
 {
     this->code = code;
-    (void)snprintf(this->buf, sizeof(this->buf),
-        "HTTP Error %d: %s", code, curl_easy_strerror((CURLcode)code));
+    this->msg = "HTTP Error " + std::to_string(code);
 }
 
 const char* HttpError::what() const throw()
 {
-    return (this->buf);
+    return (this->msg.c_str());
 }
 
 int HttpError::HttpCode() const
 {
     return (this->code);
-}
-
-SocketError::SocketError()
-{
-    this->os_errno = errno;
-}
-
-SocketError::SocketError(int code)
-{
-    this->os_errno = code;
-}
-
-const char* SocketError::what() const throw()
-{
-    return (std::strerror(this->os_errno));
 }
 
 Event::Event(EventType type)
@@ -122,38 +107,18 @@ std::string Event::Serialize()
     return (j.dump());
 }
 
-Response::Response()
-{
-    this->ok = false;
-    this->status = -1;
-}
-
-Response::~Response()
-{
-    this->data.clear();
-}
-
-size_t Response::writeCallback(
-    void* data, size_t size, size_t nmemb, void* userdata)
-{
-    // Arguably we could just discard the data rather than saving it;
-    // nothing is using the response body at present.
-    Response* res;
-    res = reinterpret_cast<Response*>(userdata);
-    res->data.append(reinterpret_cast<char*>(data), size * nmemb);
-    return size * nmemb;
-}
-
 Analytics::Analytics(std::string writeKey)
     : writeKey(writeKey)
 {
     host = "https://api.segment.io";
+    Handler = std::make_shared<HttpHandlerCurl>();
 }
 
 Analytics::Analytics(std::string writeKey, std::string host)
     : writeKey(writeKey)
     , host(host)
 {
+    Handler = std::make_shared<HttpHandlerCurl>();
 }
 
 Analytics::~Analytics() {}
@@ -245,87 +210,45 @@ void Analytics::Group(std::string groupId, std::map<std::string, std::string> pr
     this->sendEvent(e);
 }
 
-class CurlRequest {
-public:
-    CurlRequest();
-    ~CurlRequest();
-
-    CURL* req;
-    struct curl_slist* headers;
-};
-
-CurlRequest::CurlRequest()
+// This implementation of base64 is taken from StackOverflow:
+// https://stackoverflow.com/questions/180947/base64-decode-snippet-in-c
+// We use it here perform the base64 encode for user authentication with
+// Basic Auth, freeing the transport providers from dealing with this.
+// (Note that libcurl has this builtin though.)
+static std::string base64_encode(const std::string& in)
 {
-    struct curl_slist* hdrs = NULL;
+    std::string out;
 
-    this->headers = NULL;
-    if ((this->req = curl_easy_init()) == NULL) {
-        // Best guess...
-        throw SocketError();
+    int val = 0, valb = -6;
+    for (unsigned char c : in) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
     }
-
-    hdrs = curl_slist_append(this->headers, "Content-Type: application/json");
-    if (hdrs == NULL) {
-        curl_easy_cleanup(this->req);
-        throw SocketError();
-    }
-    this->headers = hdrs;
-    hdrs = curl_slist_append(this->headers, "Accept: application/json");
-    if (hdrs == NULL) {
-        curl_slist_free_all(this->headers);
-        curl_easy_cleanup(this->req);
-        throw SocketError();
-    }
-}
-
-CurlRequest::~CurlRequest()
-{
-    if (this->headers) {
-        curl_slist_free_all(this->headers);
-    }
-    curl_easy_cleanup(this->req);
+    if (valb > -6)
+        out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (out.size() % 4)
+        out.push_back('=');
+    return out;
 }
 
 void Analytics::sendEvent(Event& e)
 {
-    Response res;
-    CURL* req = NULL;
-    CURLcode c = CURLE_OK;
-    long status = 0;
-    CurlRequest creq;
-    req = creq.req;
+    HttpRequest req;
 
-    std::string url = this->host + "/v1/" + e.Type();
-    std::string data = e.Serialize();
+    req.Method = "POST";
+    req.URL = this->host + "/v1/" + e.Type();
+    req.Headers["User-Agent"] = "AnalyticsCPP/0.1";
+    // Note: libcurl could do this for us, but for other transports
+    // we do it here -- keeping the transports as unaware as possible.
+    req.Headers["Authorization"] = "Basic " + base64_encode(this->writeKey);
+    req.Headers["Content-Type"] = "application/json";
+    req.Headers["Accept"] = "application/json";
+    req.Body = e.Serialize();
 
-#define option(x, y) curl_easy_setopt(req, x, y);
-    option(CURLOPT_USERAGENT, "AnalyticsCPP/0.0");
-    option(CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-    option(CURLOPT_USERPWD, this->writeKey.c_str());
-    c = option(CURLOPT_HTTPHEADER, creq.headers);
-    option(CURLOPT_URL, url.c_str());
-    option(CURLOPT_POST, 1);
-    option(CURLOPT_POSTFIELDS, data.c_str());
-    option(CURLOPT_POSTFIELDSIZE, data.size());
-    option(CURLOPT_WRITEFUNCTION, res.writeCallback);
-    option(CURLOPT_WRITEDATA, &res);
-    option(CURLOPT_HEADERDATA, &res);
-#undef option
-
-    // make request
-    c = curl_easy_perform(req);
-
-    // get status
-    curl_easy_getinfo(req, CURLINFO_RESPONSE_CODE, &status);
-
-    // Note that one of the significant drawbacks of libcurl is
-    // that we don't have an easy way to cleanup libcurl's global state.
-    if (status == 0) {
-        long en;
-        curl_easy_getinfo(req, CURLINFO_OS_ERRNO, &en);
-        throw SocketError(static_cast<int>(en));
-    } else if (status != 200) {
-        throw HttpError(static_cast<int>(status));
-    }
+    auto resp = this->Handler->Handle(req);
 }
 }

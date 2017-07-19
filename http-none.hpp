@@ -19,7 +19,7 @@ class HttpHandlerNone : public HttpHandler {
 public:
     std::shared_ptr<HttpResponse> Handle(const HttpRequest&)
     {
-        auto resp = std::make_shared<HttpResp>();
+        auto resp = std::make_shared<HttpResponse>();
         resp->Code = 0;
         resp->Message = "Unimplemented.";
         return resp;

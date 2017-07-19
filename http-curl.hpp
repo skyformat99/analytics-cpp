@@ -15,10 +15,11 @@
 namespace segment {
 
 class HttpHandlerCurl : public HttpHandler {
+
 public:
-    ~HttpHandlerCurl();
-    HttpHandlerCurl();
-    std::shared_ptr<HttpResponse> Handle(const HttpRequest& req);
+    HttpHandlerCurl(){};
+    virtual ~HttpHandlerCurl(){};
+    virtual std::shared_ptr<HttpResponse> Handle(const HttpRequest& req);
 };
 
 }; // namespace segment

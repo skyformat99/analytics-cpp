@@ -17,6 +17,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 #include <curl/curl.h>
 
@@ -73,7 +74,7 @@ public:
         this->headers = hdrs;
     }
 
-    void setBody(std::vector<char> body)
+    void setBody(const std::string& body)
     {
         this->body = body;
     }
@@ -83,10 +84,7 @@ public:
         curlReq* creq = (curlReq*)udata;
         char* ucdata = (char*)udata;
         size_t nbytes = sz * nmemb;
-        for (int i = 0; i < nbytes; i++) {
-            creq->respData.push_back(*ucdata);
-            ucdata++;
-        }
+        creq->respData += std::string(ucdata, nbytes);
         return (nbytes);
     }
 
@@ -119,42 +117,39 @@ public:
         std::string body(this->body.begin(), this->body.end());
 
         // We only handle post.
-        setopt(CURLOPT_HTTPHEADER, this->headers);
-        setopt(CURLOPT_POST, 1);
         setopt(CURLOPT_URL, url.c_str());
         setopt(CURLOPT_POSTFIELDS, body.c_str());
         setopt(CURLOPT_POSTFIELDSIZE, body.length());
+        setopt(CURLOPT_POST, 1);
+        setopt(CURLOPT_HTTPHEADER, this->headers);
         setopt(CURLOPT_WRITEFUNCTION, this->writeCallback);
         setopt(CURLOPT_WRITEDATA, this);
+        setopt(CURLOPT_VERBOSE, 1);
 
         if ((rv = curl_easy_perform(req)) != CURLE_OK) {
             if (rv == CURLE_OUT_OF_MEMORY) {
                 throw std::bad_alloc();
-            } else {
-                throw curlExcept(rv);
             }
         }
 
-#define getinfo(k, v)                                         \
-    if ((rv = curl_easy_getinfo(req, k, v)) != CURLE_OK) {    \
-        if (rv == CURLE_OUT_OF_MEMORY) {                      \
-            throw std::bad_alloc();                           \
-        } else {                                              \
-            throw std::invalid_argument("bad curl info arg"); \
-        }                                                     \
+#define getinfo(k, v)                                      \
+    if ((rv = curl_easy_getinfo(req, k, v)) != CURLE_OK) { \
+        if (rv == CURLE_OUT_OF_MEMORY) {                   \
+            throw std::bad_alloc();                        \
+        }                                                  \
     }
 
         // get status
         getinfo(CURLINFO_RESPONSE_CODE, &code);
-        this->respCode = (int)code;
         if (code == 0) {
             long errn;
             getinfo(CURLINFO_OS_ERRNO, &errn);
-            this->respMessage = std::strerror((int)errn);
+            throw std::system_error((int)errn, std::system_category());
         }
         if (code > 299) {
-            this->respMessage = "HTTP Error " + std::to_string(code);
+            throw HttpError(code);
         }
+        this->respCode = (int)code;
     }
 
     // This is probably not terribly idiomatic C++, but we put them
@@ -162,14 +157,13 @@ public:
     // but we're leaving this here in the implementation, so it should
     // be fine.  These are used by the HttpHandlerCurl class.
 
-    std::vector<char>
-        respData;
+    std::string respData;
     std::string respMessage;
     int respCode;
 
 private:
     struct curl_slist* headers;
-    std::vector<char> body;
+    std::string body;
     CURL* req;
 };
 
@@ -177,23 +171,17 @@ std::shared_ptr<HttpResponse> HttpHandlerCurl::Handle(const HttpRequest& req)
 {
 
     auto resp = std::make_shared<HttpResponse>();
-    try {
-        curlReq creq;
+    curlReq creq;
 
-        for (auto const& item : req.Headers) {
-            creq.addHeader(item.first, item.second);
-        }
-
-        creq.setBody(req.Body);
-        creq.perform("POST", req.URL);
-        resp->Code = creq.respCode;
-        resp->Message = creq.respMessage;
-        resp->Body = creq.respData;
-        // Now start adding request details.
-    } catch (std::exception& e) {
-        resp->Code = 0;
-        resp->Message = e.what();
+    for (auto const& item : req.Headers) {
+        creq.addHeader(item.first, item.second);
     }
+
+    creq.setBody(req.Body);
+    creq.perform("POST", req.URL);
+    resp->Code = creq.respCode;
+    resp->Message = creq.respMessage;
+    resp->Body = creq.respData;
 
     return resp;
 }
