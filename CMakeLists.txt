@@ -14,6 +14,7 @@ project(analytics-cpp CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIED on)
 set(CMAKE_CXX_EXTENSIONS off)
+find_package(Threads REQUIRED)
 
 enable_testing()
 
@@ -25,11 +26,11 @@ include(FindCURL)
 
 # Dynamic library
 add_library(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} ${CURL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 # Static library
 add_library(${PROJECT_NAME}_static STATIC ${SOURCES})
-target_link_libraries(${PROJECT_NAME}_static ${CURL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_static ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 if(NOT CURL_FOUND)
     message(FATAL_ERROR "Cannot find libcurl")

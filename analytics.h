@@ -8,6 +8,7 @@
 //
 
 #include <chrono>
+#include <condition_variable>
 #include <exception>
 #include <map>
 #include <memory>
@@ -168,12 +169,12 @@ public:
 
     /// Handler is the backend HTTP transport handler.  The constructor
     /// will initialize a default based upon compile time operations.
-    std::shared_ptr<HttpHandler> Handler;
+    std::shared_ptr<segment::HttpHandler> Handler;
 
     /// Callback is a callback object that wlll be called to inform
     /// the caller of success or failure of posting events to the
     /// service.
-    std::shared_ptr<Callback> Callback;
+    std::shared_ptr<segment::Callback> Callback;
 
     /// MaxRetries represents the maximum number of retries to perform
     /// posting an event, before giving up.  The failure will not be

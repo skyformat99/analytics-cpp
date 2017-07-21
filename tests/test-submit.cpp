@@ -9,6 +9,10 @@
 
 #include "analytics.h"
 
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 #include <curl/curl.h> // So that we can clean up memory at the end.
 
 #define CATCH_CONFIG_RUNNER

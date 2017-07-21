@@ -25,7 +25,9 @@
         "multi.h": "c",
         "memory": "c",
         "http-none.hpp": "c",
-        "__locale": "cpp"
+        "__locale": "cpp",
+        "condition_variable": "c",
+        "__mutex_base": "cpp"
     },
     "editor.formatOnSave": true,
     "clang-format.style": "WebKit",
