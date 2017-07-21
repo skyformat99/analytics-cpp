@@ -7,10 +7,14 @@
 // found online at https://opensource.org/licenses/MIT.
 //
 
+#include <chrono>
 #include <exception>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifndef ANALYTICS_HPP
@@ -122,21 +126,62 @@ public:
     virtual std::shared_ptr<HttpResponse> Handle(const HttpRequest&) = 0;
 };
 
+/// Callback is the base class for analytics event callbacks.
+/// This should be subclassed, and an instance stored in the Analytics
+/// object, if necessary.  The default implementation does nothing.
+class Callback {
+public:
+    virtual ~Callback(){};
+    /// Success is called when the Event has successfully been uploaded
+    /// to Segment.
+    virtual void Success(std::shared_ptr<Event>) = 0;
+
+    /// Failure is called when the Event was unable to be uploaded.
+    /// @param ev [in] An incoming event.
+    /// @param reason [in] Some reason why the failure occurrecd.
+    virtual void Failure(std::shared_ptr<Event> ev, const std::string reason) = 0;
+};
+
 class Analytics {
 public:
     Analytics(std::string writeKey);
     Analytics(std::string writeKey, std::string host);
     ~Analytics();
 
-    // Flush flushes events to the server.  If wait is true, then
-    // the caller will block until all queued events are fully uploaded
-    // to the server (or a failure uploading them was encountered).
-    // Flush should be called with wait true before exiting the
-    // application to ensure that all events of interest are uploaded.
-    void Flush(bool wait);
+    /// Flush flushes events to the server.  This just wakes up the
+    /// asynchronous background thread, and starts it sending events
+    /// to the server; it will process all events in the queue, unless
+    /// an error occurs.
+    void Flush();
 
-    // Handler is the backend HTTP transport handler.
+    /// FlushWait flushes the queue, and waits for it to empty.  This
+    /// should be called upon program exit; the destructor calls it
+    /// automatically.  This can mean that it may take some time
+    /// to destroy this object.
+    void FlushWait();
+
+    /// Scrub deletes all events that are queued for processing.
+    /// If an immediate exit is required, call this first.  This
+    /// method should be called with caution, as it generally will
+    /// lead to lost events.
+    void Scrub();
+
+    /// Handler is the backend HTTP transport handler.  The constructor
+    /// will initialize a default based upon compile time operations.
     std::shared_ptr<HttpHandler> Handler;
+
+    /// Callback is a callback object that wlll be called to inform
+    /// the caller of success or failure of posting events to the
+    /// service.
+    std::shared_ptr<Callback> Callback;
+
+    /// MaxRetries represents the maximum number of retries to perform
+    /// posting an event, before giving up.  The failure will not be
+    // reported until all retries are exhausted.
+    int MaxRetries;
+
+    // The amount of time to wait before retrying a post.
+    std::chrono::seconds RetryTime;
 
     void Track(std::string userId, std::string event, std::map<std::string, std::string> properties);
     void Track(std::string userId, std::string event);
@@ -158,9 +203,18 @@ public:
 private:
     std::string writeKey;
     std::string host;
-    std::string userUage;
 
-    void sendEvent(Event& e);
+    std::mutex lock;
+    std::condition_variable cv;
+    std::thread thr;
+    std::deque<std::shared_ptr<Event>> events;
+    bool shutdown;
+
+    void sendEvent(std::shared_ptr<Event>);
+
+    void queueEvent(std::shared_ptr<Event>);
+    void processQueue();
+    static void worker(Analytics*);
 };
 
 } // namespace segment

@@ -11,9 +11,11 @@
 
 #include "json.hpp"
 
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <thread>
 
 #include "http-curl.hpp"
 #include "http-none.hpp"
@@ -112,6 +114,10 @@ Analytics::Analytics(std::string writeKey)
 {
     host = "https://api.segment.io";
     Handler = std::make_shared<HttpHandlerCurl>();
+    thr = std::thread(worker, this);
+    MaxRetries = 5;
+    RetryTime = std::chrono::seconds(1);
+    shutdown = false;
 }
 
 Analytics::Analytics(std::string writeKey, std::string host)
@@ -119,15 +125,47 @@ Analytics::Analytics(std::string writeKey, std::string host)
     , host(host)
 {
     Handler = std::make_shared<HttpHandlerCurl>();
+    thr = std::thread(worker, this);
+    MaxRetries = 5;
+    RetryTime = std::chrono::seconds(1);
+    shutdown = false;
 }
 
-Analytics::~Analytics() {}
-
-// XXX: when we start batching events, we will want to to ensure that
-// analytics kicks off a flush event.
-void Analytics::Flush(bool wait)
+Analytics::~Analytics()
 {
-    return;
+    FlushWait();
+    std::unique_lock<std::mutex> lk(this->lock);
+    this->shutdown = true;
+    this->cv.notify_all();
+    lk.unlock();
+
+    thr.join();
+}
+
+void Analytics::FlushWait()
+{
+    std::unique_lock<std::mutex> lk(this->lock);
+
+    // NB: If an event has been taken off the queue and is being
+    // processed, then the lock will be held, preventing us from
+    // executing this check.
+    while (!events.empty()) {
+        cv.notify_all();
+        cv.wait(lk);
+    }
+}
+
+void Analytics::Flush()
+{
+    std::unique_lock<std::mutex> lk(this->lock);
+    cv.notify_all();
+}
+
+void Analytics::Scrub()
+{
+    std::unique_lock<std::mutex> lk(this->lock);
+    events.clear();
+    cv.notify_all();
 }
 
 void Analytics::Track(std::string userId, std::string event)
@@ -137,12 +175,12 @@ void Analytics::Track(std::string userId, std::string event)
 
 void Analytics::Track(std::string userId, std::string event, std::map<std::string, std::string> properties)
 {
-    Event e(EVENT_TYPE_TRACK);
-    e.userId = userId;
-    e.event = event;
-    e.properties = properties; // TODO: probably need to copy this
+    auto e = std::make_shared<Event>(EVENT_TYPE_TRACK);
+    e->userId = userId;
+    e->event = event;
+    e->properties = properties; // TODO: probably need to copy this
 
-    this->sendEvent(e);
+    this->queueEvent(e);
 }
 
 void Analytics::Identify(std::string userId)
@@ -152,11 +190,11 @@ void Analytics::Identify(std::string userId)
 
 void Analytics::Identify(std::string userId, std::map<std::string, std::string> traits)
 {
-    Event e(EVENT_TYPE_IDENTIFY);
-    e.userId = userId;
-    e.properties = traits;
+    auto e = std::make_shared<Event>(EVENT_TYPE_IDENTIFY);
+    e->userId = userId;
+    e->properties = traits;
 
-    this->sendEvent(e);
+    this->queueEvent(e);
 }
 
 void Analytics::Page(std::string event, std::string userId)
@@ -166,11 +204,11 @@ void Analytics::Page(std::string event, std::string userId)
 
 void Analytics::Page(std::string event, std::string userId, std::map<std::string, std::string> properties)
 {
-    Event e(EVENT_TYPE_PAGE);
-    e.userId = userId;
-    e.properties = properties;
+    auto e = std::make_shared<Event>(EVENT_TYPE_PAGE);
+    e->userId = userId;
+    e->properties = properties;
 
-    this->sendEvent(e);
+    this->queueEvent(e);
 }
 
 void Analytics::Screen(std::string event, std::string userId)
@@ -180,20 +218,20 @@ void Analytics::Screen(std::string event, std::string userId)
 
 void Analytics::Screen(std::string event, std::string userId, std::map<std::string, std::string> properties)
 {
-    Event e(EVENT_TYPE_SCREEN);
-    e.userId = userId;
-    e.properties = properties;
+    auto e = std::make_shared<Event>(EVENT_TYPE_SCREEN);
+    e->userId = userId;
+    e->properties = properties;
 
-    this->sendEvent(e);
+    queueEvent(e);
 }
 
 void Analytics::Alias(std::string previousId, std::string userId)
 {
-    Event e(EVENT_TYPE_ALIAS);
-    e.userId = userId;
-    e.previousId = previousId;
+    auto e = std::make_shared<Event>(EVENT_TYPE_ALIAS);
+    e->userId = userId;
+    e->previousId = previousId;
 
-    this->sendEvent(e);
+    queueEvent(e);
 }
 
 void Analytics::Group(std::string groupId)
@@ -203,11 +241,11 @@ void Analytics::Group(std::string groupId)
 
 void Analytics::Group(std::string groupId, std::map<std::string, std::string> properties)
 {
-    Event e(EVENT_TYPE_GROUP);
-    e.groupId = groupId;
-    e.properties = properties;
+    auto e = std::make_shared<Event>(EVENT_TYPE_GROUP);
+    e->groupId = groupId;
+    e->properties = properties;
 
-    this->sendEvent(e);
+    queueEvent(e);
 }
 
 // This implementation of base64 is taken from StackOverflow:
@@ -235,20 +273,105 @@ static std::string base64_encode(const std::string& in)
     return out;
 }
 
-void Analytics::sendEvent(Event& e)
+void Analytics::sendEvent(std::shared_ptr<Event> e)
 {
     HttpRequest req;
 
     req.Method = "POST";
-    req.URL = this->host + "/v1/" + e.Type();
+    req.URL = this->host + "/v1/" + e->Type();
     req.Headers["User-Agent"] = "AnalyticsCPP/0.1";
     // Note: libcurl could do this for us, but for other transports
     // we do it here -- keeping the transports as unaware as possible.
     req.Headers["Authorization"] = "Basic " + base64_encode(this->writeKey);
     req.Headers["Content-Type"] = "application/json";
     req.Headers["Accept"] = "application/json";
-    req.Body = e.Serialize();
+    req.Body = e->Serialize();
 
     auto resp = this->Handler->Handle(req);
+}
+
+void Analytics::queueEvent(std::shared_ptr<Event> ev)
+{
+    std::lock_guard<std::mutex> lk(this->lock);
+    this->events.push_back(ev);
+    this->cv.notify_all();
+}
+
+void Analytics::processQueue()
+{
+    int fails = 0;
+    bool ok;
+    std::string reason;
+
+    for (;;) {
+        std::unique_lock<std::mutex> lk(this->lock);
+
+        if (events.empty()) {
+            // Reset failure count so we start with a clean slate.
+            // Otherwise we could have a failure hours earlier that
+            // allows only one failed post hours later.
+            fails = 0;
+
+            // We might have a flusher waiting
+            cv.notify_all();
+
+            // We only shut down if the queue was empty.  To force
+            // a shutdown without draining, just clear the queue
+            // independently.
+            if (shutdown) {
+                return;
+            }
+
+            cv.wait(lk);
+            continue;
+        }
+
+        std::shared_ptr<Event> ev = events.front();
+        events.pop_front();
+        try {
+            sendEvent(ev);
+            ok = true;
+            fails = false;
+        } catch (std::exception& e) {
+            if (fails < MaxRetries) {
+                // Something bad happened.  Let's wait a bit and
+                // try again later.  We return this even to the
+                // front.
+                fails++;
+                events.push_back(ev);
+                cv.wait_for(lk, RetryTime);
+                continue;
+            }
+            ok = false;
+            reason = e.what();
+            // We intentionally have chosen not to reset the failure
+            // count.  Which means if we wind up failing to send one
+            // event after maxtries, we only try each of the following
+            // one time, until either the queue is empty or we have
+            // a success.
+        }
+        auto cb = Callback;
+        lk.unlock();
+
+        try {
+            if (cb != nullptr) {
+                if (ok) {
+                    cb->Success(ev);
+                } else {
+                    cb->Failure(ev, reason);
+                }
+            }
+        } catch (std::exception& e) {
+            // User supplied callback code failed.  There isn't really
+            // anything else we can do.  Muddle on.  This prevents a
+            // failure there from silently causing the processing thread
+            // to stop functioning.
+        }
+    }
+}
+
+void Analytics ::worker(Analytics* self)
+{
+    self->processQueue();
 }
 }

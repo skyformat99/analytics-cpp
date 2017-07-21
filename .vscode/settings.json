@@ -24,7 +24,8 @@
         "catch.hpp": "c",
         "multi.h": "c",
         "memory": "c",
-        "http-none.hpp": "c"
+        "http-none.hpp": "c",
+        "__locale": "cpp"
     },
     "editor.formatOnSave": true,
     "clang-format.style": "WebKit",
