@@ -49,8 +49,8 @@ public:
     Event(EventType type);
     ~Event();
 
-    std::string Serialize();
-    std::string Type();
+    std::string Serialize() const;
+    std::string Type() const;
 
     std::string userId;
     std::string event;
@@ -178,11 +178,28 @@ public:
 
     /// MaxRetries represents the maximum number of retries to perform
     /// posting an event, before giving up.  The failure will not be
-    // reported until all retries are exhausted.
+    /// reported until all retries are exhausted.
     int MaxRetries;
 
-    // The amount of time to wait before retrying a post.
-    std::chrono::seconds RetryTime;
+    /// FlushCount is the maximum number of messages to hold before flushing.
+    /// Changing this value is not recommended.
+    int FlushCount;
+
+    /// FlushSize is the upper bound on batch size before we flush to the
+    /// network.  This is actuallly a count in bytes; the entire marshalled
+    /// object size is considered.  Note that this implemnentation uses
+    /// compact encoding by default.
+    size_t FlushSize;
+
+    /// FlushInterval indicates how long we wait to collect messages to
+    /// send them in a single batch.  We will upload a batch of messages
+    /// whenever we have enough data to meet FlushCount, this much time
+    /// has passed, or an explicit Flush or FlushWait is called (or this
+    /// object is destroyed.)
+    std::chrono::seconds FlushInterval;
+
+    /// The amount of time to wait before retrying a post.
+    std::chrono::seconds RetryInterval;
 
     void Track(std::string userId, std::string event, std::map<std::string, std::string> properties);
     void Track(std::string userId, std::string event);
@@ -209,10 +226,16 @@ private:
     std::condition_variable cv;
     std::thread thr;
     std::deque<std::shared_ptr<Event>> events;
+    std::deque<std::shared_ptr<Event>> batch;
+    std::chrono::system_clock::time_point flushTime;
+    std::chrono::system_clock::time_point retryTime;
+    std::chrono::system_clock::time_point wakeTime;
+
+    bool needFlush;
     bool shutdown;
 
     void sendEvent(std::shared_ptr<Event>);
-
+    void sendBatch();
     void queueEvent(std::shared_ptr<Event>);
     void processQueue();
     static void worker(Analytics*);

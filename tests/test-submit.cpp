@@ -38,20 +38,20 @@ public:
     void Wake()
     {
         std::lock_guard<std::mutex> l(lk);
-        done = true;
+        count++;
         cv.notify_all();
     }
 
-    void Wait()
+    void Wait(int num = 1)
     {
         std::unique_lock<std::mutex> l(lk);
 
-        while (!done) {
+        while (count < num) {
             cv.wait(l);
         }
     }
 
-    bool done;
+    int count;
     std::mutex lk;
     std::condition_variable cv;
     int success;
@@ -71,11 +71,64 @@ TEST_CASE("Submissions to Segment work", "[analytics]")
             auto cb = std::make_shared<myTestCB>();
             Analytics analytics(writeKey, apiHost);
             analytics.MaxRetries = 0;
+            analytics.FlushCount = 1;
             analytics.Callback = cb;
 
             analytics.Track("humptyDumpty", "Sat On A Wall", { { "crown", "broken" }, { "kingsHorses", "NoHelp" }, { "kingsMen", "NoHelp" } });
             cb->Wait();
             analytics.FlushWait();
+            REQUIRE(cb->fail == 0);
+        }
+    }
+    GIVEN("Batching tests")
+    {
+        auto writeKey = "LpSP8WJmW312Z0Yj1wluUcr76kd4F0xl";
+        auto apiHost = "https://api.segment.io";
+
+        THEN("we can submit tracked events")
+        {
+            auto cb = std::make_shared<myTestCB>();
+            Analytics analytics(writeKey, apiHost);
+            analytics.MaxRetries = 0;
+            analytics.Callback = cb;
+            analytics.FlushInterval = std::chrono::seconds(3);
+
+            analytics.Track("batch1", "First", { { "abc", "def" } });
+            analytics.Track("batch2", "Second", { { "abc", "234" } });
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            analytics.Track("batch3", "Third", { { "abc", "567" } });
+            //            analytics.Flush();
+
+            cb->Wait(3);
+            analytics.FlushWait();
+            REQUIRE(cb->fail == 0);
+            REQUIRE(cb->success == 3);
+        }
+    }
+
+    GIVEN("Flushed events")
+    {
+        auto writeKey = "LpSP8WJmW312Z0Yj1wluUcr76kd4F0xl";
+        auto apiHost = "https://api.segment.io";
+
+        THEN("we can submit tracked events")
+        {
+            auto cb = std::make_shared<myTestCB>();
+            Analytics analytics(writeKey, apiHost);
+            analytics.MaxRetries = 0;
+            analytics.Callback = cb;
+            analytics.FlushInterval = std::chrono::seconds(3);
+
+            analytics.Track("flush1", "Nanny", { { "abc", "def" } });
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            analytics.Track("flush2", "Charles", { { "abc", "234" } });
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            analytics.Track("flush3", "Flushing", { { "abc", "567" } });
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            analytics.Flush();
+
+            cb->Wait(3);
+            REQUIRE(cb->success == 3);
             REQUIRE(cb->fail == 0);
         }
     }
@@ -90,6 +143,7 @@ TEST_CASE("Submissions to Segment work", "[analytics]")
             auto cb = std::make_shared<myTestCB>();
             Analytics analytics(writeKey, apiHost);
             analytics.MaxRetries = 0;
+            analytics.FlushCount = 1;
             analytics.Callback = cb;
 
             analytics.Track("bogosURL", "Did Something", { { "foo", "bar" } });
@@ -126,6 +180,7 @@ TEST_CASE("Submissions to Segment work", "[analytics]")
             auto cb = std::make_shared<myTestCB>();
             Analytics analytics(writeKey, apiHost);
             analytics.MaxRetries = 0;
+            analytics.FlushCount = 1;
             analytics.Callback = cb;
 
             analytics.Track("userId", "Did Something", { { "foo", "bar" }, { "qux", "mux" } });

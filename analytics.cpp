@@ -55,7 +55,7 @@ Event::~Event()
     properties.clear();
 }
 
-std::string Event::Type()
+std::string Event::Type() const
 {
     switch (type) {
     case EVENT_TYPE_IDENTIFY:
@@ -78,34 +78,44 @@ std::string Event::Type()
     }
 }
 
-// super dirty JSON serialization... should clean this up
-std::string Event::Serialize()
+void to_json(json& j, const Event& ev)
 {
-    json j;
-
-    j["type"] = this->Type();
-    if (event != "") {
-        j["event"] = event;
+    j["type"] = ev.Type();
+    if (ev.event != "") {
+        j["event"] = ev.event;
     }
-    if (userId != "") {
-        j["userId"] = userId;
+    if (ev.userId != "") {
+        j["userId"] = ev.userId;
     }
-    if (groupId != "") {
-        j["groupId"] = groupId;
+    if (ev.groupId != "") {
+        j["groupId"] = ev.groupId;
     }
-    if (anonymousId != "") {
-        j["anonymousId"] = anonymousId;
+    if (ev.anonymousId != "") {
+        j["anonymousId"] = ev.anonymousId;
     }
-    if (previousId != "") {
-        j["previousId"] = previousId;
+    if (ev.previousId != "") {
+        j["previousId"] = ev.previousId;
     }
-    if (!properties.empty()) {
-        if (this->Type() == "identify") {
-            j["traits"] = properties;
+    if (!ev.properties.empty()) {
+        // XXX: Reading the API docs, I think this should be true for group
+        // as well?
+        if (ev.Type() == "identify") {
+            j["traits"] = ev.properties;
         } else {
-            j["properties"] = properties;
+            j["properties"] = ev.properties;
         }
     }
+}
+
+void to_json(json& j, std::shared_ptr<Event> ev)
+{
+    return (to_json(j, *ev));
+}
+
+std::string Event::Serialize() const
+{
+    json j;
+    to_json(j, *this);
     return (j.dump());
 }
 
@@ -116,8 +126,13 @@ Analytics::Analytics(std::string writeKey)
     Handler = std::make_shared<HttpHandlerCurl>();
     thr = std::thread(worker, this);
     MaxRetries = 5;
-    RetryTime = std::chrono::seconds(1);
+    RetryInterval = std::chrono::seconds(1);
     shutdown = false;
+    FlushCount = 250;
+    FlushSize = 500 * 1024;
+    FlushInterval = std::chrono::seconds(10);
+    needFlush = false;
+    wakeTime = std::chrono::time_point<std::chrono::system_clock>::max();
 }
 
 Analytics::Analytics(std::string writeKey, std::string host)
@@ -127,8 +142,13 @@ Analytics::Analytics(std::string writeKey, std::string host)
     Handler = std::make_shared<HttpHandlerCurl>();
     thr = std::thread(worker, this);
     MaxRetries = 5;
-    RetryTime = std::chrono::seconds(1);
+    RetryInterval = std::chrono::seconds(1);
     shutdown = false;
+    FlushCount = 250;
+    FlushSize = 500 * 1024;
+    FlushInterval = std::chrono::seconds(10);
+    needFlush = false;
+    wakeTime = std::chrono::time_point<std::chrono::system_clock>::max();
 }
 
 Analytics::~Analytics()
@@ -150,6 +170,7 @@ void Analytics::FlushWait()
     // processed, then the lock will be held, preventing us from
     // executing this check.
     while (!events.empty()) {
+        needFlush = true;
         cv.notify_all();
         cv.wait(lk);
     }
@@ -158,6 +179,7 @@ void Analytics::FlushWait()
 void Analytics::Flush()
 {
     std::unique_lock<std::mutex> lk(this->lock);
+    needFlush = true;
     cv.notify_all();
 }
 
@@ -273,6 +295,26 @@ static std::string base64_encode(const std::string& in)
     return out;
 }
 
+void Analytics::sendBatch()
+{
+    HttpRequest req;
+    json body;
+    body["batch"] = batch;
+    // XXX add default context or integrations?
+
+    req.Method = "POST";
+    req.URL = this->host + "/v1/batch";
+    req.Headers["User-Agent"] = "AnalyticsCPP/0.1";
+    // Note: libcurl could do this for us, but for other transports
+    // we do it here -- keeping the transports as unaware as possible.
+    req.Headers["Authorization"] = "Basic " + base64_encode(this->writeKey);
+    req.Headers["Content-Type"] = "application/json";
+    req.Headers["Accept"] = "application/json";
+    req.Body = body.dump();
+
+    auto resp = this->Handler->Handle(req);
+}
+
 void Analytics::sendEvent(std::shared_ptr<Event> e)
 {
     HttpRequest req;
@@ -292,9 +334,15 @@ void Analytics::sendEvent(std::shared_ptr<Event> e)
 
 void Analytics::queueEvent(std::shared_ptr<Event> ev)
 {
-    std::lock_guard<std::mutex> lk(this->lock);
-    this->events.push_back(ev);
-    this->cv.notify_all();
+    std::lock_guard<std::mutex> lk(lock);
+    events.push_back(ev);
+    if (events.size() == 1) {
+        flushTime = std::chrono::system_clock::now() + FlushInterval;
+        if (flushTime < wakeTime) {
+            wakeTime = flushTime;
+        }
+    }
+    cv.notify_all();
 }
 
 void Analytics::processQueue()
@@ -302,15 +350,17 @@ void Analytics::processQueue()
     int fails = 0;
     bool ok;
     std::string reason;
+    std::deque<std::shared_ptr<Event>> notifyq;
 
     for (;;) {
         std::unique_lock<std::mutex> lk(this->lock);
 
-        if (events.empty()) {
+        if (events.empty() && batch.empty()) {
             // Reset failure count so we start with a clean slate.
             // Otherwise we could have a failure hours earlier that
             // allows only one failed post hours later.
             fails = 0;
+            wakeTime = std::chrono::time_point<std::chrono::system_clock>::max();
 
             // We might have a flusher waiting
             cv.notify_all();
@@ -326,10 +376,47 @@ void Analytics::processQueue()
             continue;
         }
 
-        std::shared_ptr<Event> ev = events.front();
-        events.pop_front();
+        // Gather up new items into the batch, assuming that the batch
+        // is not already full.
+        while ((!events.empty()) && (batch.size() < FlushCount)) {
+            json j;
+
+            // Try adding an event to the batch and checking the
+            // serialization...  This is pretty ineffecient as we
+            // serialize the objects multiple times, but it's easier
+            // to understand.  Later look at saving the last size,
+            // and only adding the size of the serialized event.
+
+            auto ev = events.front();
+            batch.push_back(ev);
+            j["batch"] = batch;
+            if (j.dump().size() >= FlushSize) {
+                batch.pop_back(); // remove what we just added.
+                needFlush = true;
+                break;
+            }
+            // We inclucded this event, so remove it from the queue
+            // (it is already inthe batch.)
+            events.pop_front();
+        }
+
+        // WWe hit the limit.
+        if (batch.size() >= FlushCount) {
+            needFlush = true;
+        }
+
+        auto now = std::chrono::system_clock::now();
+
+        if ((!needFlush) && (now < wakeTime)) {
+            cv.wait_until(lk, wakeTime);
+            continue;
+        }
+
+        // We're trying to flush, so clear our "need".
+        needFlush = false;
+
         try {
-            sendEvent(ev);
+            sendBatch();
             ok = true;
             fails = false;
         } catch (std::exception& e) {
@@ -338,8 +425,11 @@ void Analytics::processQueue()
                 // try again later.  We return this even to the
                 // front.
                 fails++;
-                events.push_back(ev);
-                cv.wait_for(lk, RetryTime);
+                retryTime = now + RetryInterval;
+                if (retryTime < wakeTime) {
+                    wakeTime = retryTime;
+                }
+                cv.wait_until(lk, wakeTime);
                 continue;
             }
             ok = false;
@@ -351,21 +441,27 @@ void Analytics::processQueue()
             // a success.
         }
         auto cb = Callback;
+        notifyq = batch;
+        batch.clear();
         lk.unlock();
 
-        try {
-            if (cb != nullptr) {
-                if (ok) {
-                    cb->Success(ev);
-                } else {
-                    cb->Failure(ev, reason);
+        while (!notifyq.empty()) {
+            auto ev = notifyq.front();
+            notifyq.pop_front();
+            try {
+                if (cb != nullptr) {
+                    if (ok) {
+                        cb->Success(ev);
+                    } else {
+                        cb->Failure(ev, reason);
+                    }
                 }
+            } catch (std::exception& e) {
+                // User supplied callback code failed.  There isn't really
+                // anything else we can do.  Muddle on.  This prevents a
+                // failure there from silently causing the processing thread
+                // to stop functioning.
             }
-        } catch (std::exception& e) {
-            // User supplied callback code failed.  There isn't really
-            // anything else we can do.  Muddle on.  This prevents a
-            // failure there from silently causing the processing thread
-            // to stop functioning.
         }
     }
 }
