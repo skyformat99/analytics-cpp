@@ -7,23 +7,33 @@
 // found online at https://opensource.org/licenses/MIT.
 //
 
-#include "analytics.h"
+#ifndef SEGMENT_HTTP_NONE_HPP_
+#define SEGMENT_HTTP_NONE_HPP_
+
+#include "http.hpp"
 
 // This is a dumb-do-nothing implementation of the HttpHandler.
 // It is intended to stand-in for a default, if no better
 // implementation is available.
 
 namespace segment {
+namespace http {
 
-class HttpHandlerNone : public HttpHandler {
-public:
-    std::shared_ptr<HttpResponse> Handle(const HttpRequest&)
-    {
-        auto resp = std::make_shared<HttpResponse>();
-        resp->Code = 0;
-        resp->Message = "Unimplemented.";
-        return resp;
+    /// HttpHandlerNone is a stub implementation that does not actually
+    /// do anything.  It exists to be compiled into binaries that don't
+    /// use libcurl, so that a NOP default can exist.
+    class HttpHandlerNone : public HttpHandler {
+    public:
+        std::shared_ptr<HttpResponse> Handle(const HttpRequest&)
+        {
+            auto resp = std::make_shared<HttpResponse>();
+            resp->Code = 0;
+            resp->Message = "Unimplemented.";
+            return resp;
+        };
     };
-};
 
-}; // namespace segment
+} // namespace http
+} // namespace segment
+
+#endif // SEGMENT_HTTP_NONE_HPP_

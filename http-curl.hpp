@@ -7,21 +7,27 @@
 // found online at https://opensource.org/licenses/MIT.
 //
 
-#include "analytics.h"
+#ifndef SEGMENT_HTTP_CURL_HPP_
+#define SEGMENT_HTTP_CURL_HPP_
 
-#ifndef HTTP_CURL_HPP
-#define HTTP_CURL_HPP
+#include "http.hpp"
 
 namespace segment {
+namespace http {
 
-class HttpHandlerCurl : public HttpHandler {
+    /// HttpCurl is an implementation of the HttpHandler API
+    /// based on libcurl.  At present it only supports POST, and it
+    /// does not actually populate the response fields or data, since
+    /// they are not used by the framework.
+    class HttpHandlerCurl : public HttpHandler {
 
-public:
-    HttpHandlerCurl(){};
-    virtual ~HttpHandlerCurl(){};
-    virtual std::shared_ptr<HttpResponse> Handle(const HttpRequest& req);
-};
+    public:
+        HttpHandlerCurl(){};
+        virtual ~HttpHandlerCurl(){};
+        virtual std::shared_ptr<HttpResponse> Handle(const HttpRequest& req);
+    };
 
-}; // namespace segment
+} // namespace http
+} // namespace segment
 
-#endif // HTTP_CURL_HPP
+#endif // SEGMENT_HTTP_CURL_HPP_

@@ -19,7 +19,7 @@ find_package(Threads REQUIRED)
 enable_testing()
 
 set(SOURCES analytics.cpp analytics.h
-    http-curl.cpp http-curl.hpp
+    http.hpp http-curl.cpp http-curl.hpp
     http-none.hpp)
 
 include(FindCURL)

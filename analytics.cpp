@@ -29,22 +29,6 @@ using json = nlohmann::json;
 
 namespace segment {
 
-HttpError::HttpError(int code)
-{
-    this->code = code;
-    this->msg = "HTTP Error " + std::to_string(code);
-}
-
-const char* HttpError::what() const throw()
-{
-    return (this->msg.c_str());
-}
-
-int HttpError::HttpCode() const
-{
-    return (this->code);
-}
-
 Event::Event(EventType type)
     : type(type)
 {
@@ -123,7 +107,7 @@ Analytics::Analytics(std::string writeKey)
     : writeKey(writeKey)
 {
     host = "https://api.segment.io";
-    Handler = std::make_shared<HttpHandlerCurl>();
+    Handler = std::make_shared<segment::http::HttpHandlerCurl>();
     thr = std::thread(worker, this);
     MaxRetries = 5;
     RetryInterval = std::chrono::seconds(1);
@@ -139,7 +123,7 @@ Analytics::Analytics(std::string writeKey, std::string host)
     : writeKey(writeKey)
     , host(host)
 {
-    Handler = std::make_shared<HttpHandlerCurl>();
+    Handler = std::make_shared<segment::http::HttpHandlerCurl>();
     thr = std::thread(worker, this);
     MaxRetries = 5;
     RetryInterval = std::chrono::seconds(1);
@@ -297,7 +281,7 @@ static std::string base64_encode(const std::string& in)
 
 void Analytics::sendBatch()
 {
-    HttpRequest req;
+    segment::http::HttpRequest req;
     json body;
     body["batch"] = batch;
     // XXX add default context or integrations?
@@ -317,7 +301,7 @@ void Analytics::sendBatch()
 
 void Analytics::sendEvent(std::shared_ptr<Event> e)
 {
-    HttpRequest req;
+    segment::http::HttpRequest req;
 
     req.Method = "POST";
     req.URL = this->host + "/v1/" + e->Type();
@@ -466,7 +450,7 @@ void Analytics::processQueue()
     }
 }
 
-void Analytics ::worker(Analytics* self)
+void Analytics::worker(Analytics* self)
 {
     self->processQueue();
 }
