@@ -8,7 +8,7 @@
 #
 
 cmake_minimum_required (VERSION 3.1)
-project(analytics-cpp CXX)
+project(analytics-cpp)
 
 # We require C++ 11.
 set(CMAKE_CXX_STANDARD 11)
@@ -18,7 +18,8 @@ find_package(Threads REQUIRED)
 
 enable_testing()
 
-set(SOURCES analytics.cpp analytics.h
+set(SOURCES analytics.cpp analytics.hpp
+    date.hpp json.hpp
     http.hpp http-curl.cpp http-curl.hpp
     http-none.hpp)
 
