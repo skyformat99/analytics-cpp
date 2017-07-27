@@ -27,80 +27,29 @@
 namespace segment {
 namespace analytics {
 
-    /// Traits are an arbitrary JSON object, containing the
-    /// attributes for a user.  The value MUST be an object.
-    /// Treat these like you would a dictionary.
-    using Traits = nlohmann::json;
-
-    /// Properties are arbitrary JSON objects.  Treat
-    /// these like you would a dictionary.
-    using Properties = nlohmann::json;
-
-    /// Context is another JSON object type, with
-    /// nested values.  The library populates some of these
-    /// automatically.  Segments servers ignore fields that
-    /// are not documented -- see the Context API spec for
-    /// more details.
-    using Context = nlohmann::json;
-
-    typedef enum {
-        EVENT_TYPE_IDENTIFY,
-        EVENT_TYPE_TRACK,
-        EVENT_TYPE_PAGE,
-        EVENT_TYPE_SCREEN,
-        EVENT_TYPE_GROUP,
-        EVENT_TYPE_ALIAS
-    } EventType;
+    /// Object represents a JSON object.  It supports very flexible
+    /// map style operations, etc.  In the places where this is used
+    /// we validate the entity is actually an Object.
+    using Object = nlohmann::json;
 
     class Event {
     public:
-        Event(EventType type);
-        ~Event();
+        Event(
+            std::string type, /// Event type, like "alias"
+            std::string userId, /// userId, or empty
+            std::string anonymousId, /// anonymousId, or empty
+            Object context, /// context, or null
+            Object integrations /// integrations, or null
+            );
 
-        std::string Serialize() const;
-        std::string Type() const;
-
-        std::string userId;
-        std::string event;
-        std::string groupId;
-        std::string anonymousId;
-        std::string previousId;
-        std::map<std::string, std::string> properties;
-
-    private:
-        EventType type;
+        ~Event(){};
+        Object object;
     };
 
-    class Record {
-    public:
-        virtual std::string to_json() = 0;
-        std::string recordType;
-        std::string anonymousId;
-        std::string userId;
-        Context context;
-        std::map<std::string, bool> integrations;
-        // context
-        // integrations
-        // sentAt
-        // timestmp
-    };
-
-    class Alias : public Record {
-    public:
-        std::string userId;
-        std::string previousId;
-    };
-
-    class Identify : public Record {
-    public:
-        Traits traits;
-    };
-
-    class Track : public Record {
-    public:
-        std::string event;
-        Properties properties;
-    };
+    // TimeStamp is a convenience function that returns the current system
+    // time in ISO-8601 format.  It will include fractional times to the
+    /// precision of the system clock.
+    std::string TimeStamp();
 
     /// Callback is the base class for analytics event callbacks.
     /// This should be subclassed, and an instance stored in the Analytics
@@ -179,22 +128,30 @@ namespace analytics {
         /// The amount of time to wait before retrying a post.
         std::chrono::seconds RetryInterval;
 
-        void Track(std::string userId, std::string event, std::map<std::string, std::string> properties);
-        void Track(std::string userId, std::string event);
+        /// Default context.
+        Object Context;
 
-        void Identify(std::string userId, std::map<std::string, std::string> traits);
-        void Identify(std::string userId);
+        /// Default integrations. This must be a dictionary of string
+        /// keys to booleans.  (A JSON object where all values are booleans.)
+        Object Integrations;
 
-        void Page(std::string event, std::string userId, std::map<std::string, std::string> properties);
-        void Page(std::string event, std::string userId);
+        void Track(std::string userId, std::string event, Object properties = nullptr);
+        void Track(std::string userId, std::string anonymousId, std::string event, Object properties, Object context, Object integrations);
 
-        void Screen(std::string event, std::string userId, std::map<std::string, std::string> properties);
-        void Screen(std::string event, std::string userId);
+        void Identify(std::string userId, Object traits = nullptr);
+        void Identify(std::string userId, std::string anonymousId, Object traits, Object context, Object integrations);
+
+        void Page(std::string name, std::string userId, Object properties = nullptr);
+        void Page(std::string name, std::string userId, std::string anonymousId, Object properties, Object context, Object integrations);
+
+        void Screen(std::string name, std::string userId, Object properties = nullptr);
+        void Screen(std::string name, std::string userId, std::string anonymousId, Object properties, Object context, Object integrations);
 
         void Alias(std::string previousId, std::string userId);
+        void Alias(std::string previousId, std::string userId, std::string anonymousId, Object context, Object integrations);
 
-        void Group(std::string groupId, std::map<std::string, std::string> properties);
-        void Group(std::string groupId);
+        void Group(std::string groupId, Object traits = nullptr);
+        void Group(std::string groupId, std::string userId, std::string anonymousId, Object traits, Object context, Object integrations);
 
     private:
         std::string writeKey;

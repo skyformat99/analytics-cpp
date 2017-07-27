@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "analytics.hpp"
+#include "date.hpp"
 #include "http-curl.hpp"
 #include "http-none.hpp"
 #include "json.hpp"
@@ -28,78 +29,44 @@ using json = nlohmann::json;
 namespace segment {
 namespace analytics {
 
-    Event::Event(EventType type)
-        : type(type)
+    std::string TimeStamp()
     {
+        auto now = std::chrono::system_clock::now();
+        auto tmstamp = date::format("%FT%TZ",
+            std::chrono::time_point_cast<std::chrono::milliseconds>(now));
+        return tmstamp;
     }
 
-    Event::~Event()
+    Event::Event(std::string type, std::string userId, std::string anonymousId, Object context, Object integrations)
     {
-        properties.clear();
-    }
-
-    std::string Event::Type() const
-    {
-        switch (type) {
-        case EVENT_TYPE_IDENTIFY:
-            return "identify";
-            break;
-        case EVENT_TYPE_SCREEN:
-            return "screen";
-            break;
-        case EVENT_TYPE_PAGE:
-            return "page";
-            break;
-        case EVENT_TYPE_ALIAS:
-            return "alias";
-            break;
-        case EVENT_TYPE_TRACK:
-            return "track";
-            break;
-        default:
-            throw std::invalid_argument("Invalid event type");
+        object = json::object();
+        object["timestamp"] = TimeStamp();
+        object["type"] = type;
+        if (userId != "") {
+            object["userId"] = userId;
+        }
+        if (anonymousId != "") {
+            object["anonymousId"] = anonymousId;
+        }
+        if (context.is_object()) {
+            object["context"] = context;
+        }
+        if (integrations.is_object()) {
+            object["integrations"] = integrations;
         }
     }
 
     void to_json(json& j, const Event& ev)
     {
-        j["type"] = ev.Type();
-        if (ev.event != "") {
-            j["event"] = ev.event;
+        if (ev.object.is_object()) {
+            j = ev.object;
         }
-        if (ev.userId != "") {
-            j["userId"] = ev.userId;
-        }
-        if (ev.groupId != "") {
-            j["groupId"] = ev.groupId;
-        }
-        if (ev.anonymousId != "") {
-            j["anonymousId"] = ev.anonymousId;
-        }
-        if (ev.previousId != "") {
-            j["previousId"] = ev.previousId;
-        }
-        if (!ev.properties.empty()) {
-            // XXX: Reading the API docs, I think this should be true for group
-            // as well?
-            if (ev.Type() == "identify") {
-                j["traits"] = ev.properties;
-            } else {
-                j["properties"] = ev.properties;
-            }
-        }
+        j = nullptr;
     }
 
     void to_json(json& j, std::shared_ptr<Event> ev)
     {
         return (to_json(j, *ev));
-    }
-
-    std::string Event::Serialize() const
-    {
-        json j;
-        to_json(j, *this);
-        return (j.dump());
     }
 
     Analytics::Analytics(std::string writeKey)
@@ -173,82 +140,89 @@ namespace analytics {
         cv.notify_all();
     }
 
-    void Analytics::Track(std::string userId, std::string event)
+    void Analytics::Track(std::string userId, std::string event, Object properties)
     {
-        this->Track(userId, event, {});
+        this->Track(userId, "", event, properties, nullptr, nullptr);
     }
 
-    void Analytics::Track(std::string userId, std::string event, std::map<std::string, std::string> properties)
+    void Analytics::Track(std::string userId, std::string anonymousId, std::string event, Object properties, Object context, Object integrations)
     {
-        auto e = std::make_shared<Event>(EVENT_TYPE_TRACK);
-        e->userId = userId;
-        e->event = event;
-        e->properties = properties; // TODO: probably need to copy this
+        auto e = std::make_shared<Event>("track", userId, anonymousId, context, integrations);
+        e->object["event"] = event;
+        if (properties.is_object()) {
+            e->object["properties"] = properties;
+        }
 
         this->queueEvent(e);
     }
 
-    void Analytics::Identify(std::string userId)
+    void Analytics::Identify(std::string userId, Object traits)
     {
-        this->Identify(userId, {});
+        this->Identify(userId, "", traits, nullptr, nullptr);
     }
 
-    void Analytics::Identify(std::string userId, std::map<std::string, std::string> traits)
+    void Analytics::Identify(std::string userId, std::string anonymousId, Object traits, Object context, Object integrations)
     {
-        auto e = std::make_shared<Event>(EVENT_TYPE_IDENTIFY);
-        e->userId = userId;
-        e->properties = traits;
-
+        auto e = std::make_shared<Event>("identify", userId, anonymousId, context, integrations);
+        if (traits.is_object()) {
+            e->object["traits"] = traits;
+        }
         this->queueEvent(e);
     }
 
-    void Analytics::Page(std::string event, std::string userId)
+    void Analytics::Page(std::string name, std::string userId, Object properties)
     {
-        this->Page(event, userId, {});
+        this->Page(name, userId, "", properties, nullptr, nullptr);
     }
 
-    void Analytics::Page(std::string event, std::string userId, std::map<std::string, std::string> properties)
+    void Analytics::Page(std::string name, std::string userId, std::string anonymousId, Object properties, Object context, Object integrations)
     {
-        auto e = std::make_shared<Event>(EVENT_TYPE_PAGE);
-        e->userId = userId;
-        e->properties = properties;
+        auto e = std::make_shared<Event>("page", userId, anonymousId, context, integrations);
+        if (properties.is_object()) {
+            e->object["properties"] = properties;
+        }
 
         this->queueEvent(e);
     }
-
-    void Analytics::Screen(std::string event, std::string userId)
+    void Analytics::Screen(std::string name, std::string userId, Object properties)
     {
-        this->Screen(event, userId, {});
+        this->Screen(name, userId, "", properties, nullptr, nullptr);
     }
 
-    void Analytics::Screen(std::string event, std::string userId, std::map<std::string, std::string> properties)
+    void Analytics::Screen(std::string name, std::string userId, std::string anonymousId, Object properties, Object context, Object integrations)
     {
-        auto e = std::make_shared<Event>(EVENT_TYPE_SCREEN);
-        e->userId = userId;
-        e->properties = properties;
+        auto e = std::make_shared<Event>("screen", userId, anonymousId, context, integrations);
+        if (properties.is_object()) {
+            e->object["properties"] = properties;
+        }
 
-        queueEvent(e);
+        this->queueEvent(e);
     }
 
     void Analytics::Alias(std::string previousId, std::string userId)
     {
-        auto e = std::make_shared<Event>(EVENT_TYPE_ALIAS);
-        e->userId = userId;
-        e->previousId = previousId;
+        this->Alias(previousId, userId, "", nullptr, nullptr);
+    }
+
+    void Analytics::Alias(std::string previousId, std::string userId, std::string anonymousId, Object context, Object integrations)
+    {
+        auto e = std::make_shared<Event>("alias", userId, anonymousId, context, integrations);
+        e->object["previousId"] = previousId;
 
         queueEvent(e);
     }
 
-    void Analytics::Group(std::string groupId)
+    void Analytics::Group(std::string groupId, Object traits)
     {
-        this->Group(groupId);
+        // The docs seem to claim that a userId or anonymousId must be set,
+        // but the code I've seen suggests otherwise.
+        this->Group(groupId, "", "", traits, nullptr, nullptr);
     }
 
-    void Analytics::Group(std::string groupId, std::map<std::string, std::string> properties)
+    void Analytics::Group(std::string groupId, std::string userId, std::string anonymousId, Object traits, Object context, Object integrations)
     {
-        auto e = std::make_shared<Event>(EVENT_TYPE_GROUP);
-        e->groupId = groupId;
-        e->properties = properties;
+        auto e = std::make_shared<Event>("group", userId, anonymousId, context, integrations);
+        e->object["groupId"] = groupId;
 
         queueEvent(e);
     }
@@ -281,9 +255,18 @@ namespace analytics {
     void Analytics::sendBatch()
     {
         segment::http::HttpRequest req;
+        // XXX add default context or integrations?
+
+        auto tmstamp = TimeStamp();
+        // Update the time on the elements of the batch.  We do this
+        // on each new attempt, since we're trying to synchronize our clock
+        // with the server's.
+        for (auto ev : batch) {
+            ev->object["sentAt"] = tmstamp;
+        }
+
         json body;
         body["batch"] = batch;
-        // XXX add default context or integrations?
 
         req.Method = "POST";
         req.URL = this->host + "/v1/batch";
@@ -366,12 +349,14 @@ namespace analytics {
                 events.pop_front();
             }
 
-            // WWe hit the limit.
+            // We hit the limit.
             if (batch.size() >= FlushCount) {
                 needFlush = true;
             }
 
             auto now = std::chrono::system_clock::now();
+            auto tmstamp = date::format("%FT%TZ",
+                std::chrono::time_point_cast<std::chrono::milliseconds>(now));
 
             if ((!needFlush) && (now < wakeTime)) {
                 cv.wait_until(lk, wakeTime);
