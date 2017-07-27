@@ -1,0 +1,20 @@
+language: cpp
+sudo: false
+matrix:
+  include:
+    - os: linux
+      compiler:
+        - clang
+        - gcc
+    - os: osx
+      compiler: clang
+# we may need to install libcurl, valgrind, and the custom version of libcurl
+# that is built against gnutls.
+script:
+  - printenv
+  - cmake --version
+  - mkdir build
+  - cd build
+  - cmake ..
+  - cmake --build . -- -j4
+  - ctest --output-on-failure -C Debug

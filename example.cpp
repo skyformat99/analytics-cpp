@@ -7,9 +7,9 @@
 // found online at https://opensource.org/licenses/MIT.
 //
 
-#include "analytics.h"
+#include "analytics.hpp"
 
-using namespace segment;
+`using namespace segment::analytics;
 
 int main()
 {

@@ -7,7 +7,7 @@
 // found online at https://opensource.org/licenses/MIT.
 //
 
-#include "analytics.h"
+#include "analytics.hpp"
 
 #include <condition_variable>
 #include <mutex>
@@ -18,7 +18,7 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 
-using namespace segment;
+using namespace segment::analytics;
 
 class myTestCB : public Callback {
 public:
