@@ -1,0 +1,61 @@
+version: 0.1.{build}
+image:
+  - Visual Studio 2015
+  - Visual Studio 2017
+environment:
+  global:
+    CFLAGS: /MP
+  matrix:
+    # array of all environments used to test builds
+    # Legacy NMake, 32-bit
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      GENERATOR: NMake Makefiles
+      CFG: Debug
+      VSINSTALL: "\\Microsoft Visual Studio 14\\VC"
+      MSVC_PLATFORM: x86
+
+    # 32-bit Studio 2015
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      GENERATOR: Visual Studio 14 2015
+      CFG: Debug
+      VSINSTALL: "\\Microsoft Visual Studio 14\\VC"
+      MSVC_PLATFORM: x86
+
+    # 64-bit Studio 2015
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      GENERATOR: Visual Studio 14 2015
+      CFG: Debug
+      VSINSTALL: "\\Microsoft Visual Studio 14\\VC"
+      MSVC_PLATFORM: amd64
+
+    # 32-bit Studio 2017
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      GENERATOR: Visual Studio 15 2017
+      CFG: Debug
+      VSINSTALL: "\\Microsoft Visual Studio\\2017\\Community\\VC\\Auxiliary\\Build"
+      MSVC_PLATFORM: x86
+
+    # 64-bit Studio 2017
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      GENERATOR: Visual Studio 15 2017
+      CFG: Debug
+      VSINSTALL: "\\Microsoft Visual Studio\\2017\\Community\\VC\\Auxiliary\\Build"
+      MSVC_PLATFORM: amd64
+
+init:
+  - cmd: cmake --version
+  - C:\\"Program Files (x86)"\\"%VSINSTALL%"\\vcvarsll.bat %MSVC_PLATFORM%"
+
+before_build:
+
+build:
+  parallel: true
+
+build_script:
+  - cmd: md build
+  - cmd: cd build
+  - cmd: cmake -G "%GENERATOR%" -DCMAKE_BUILD_TYPE=%CFG% ..
+  - cmd: cmake --build .
+
+test_script:
+  - cmd: ctest --output-on-failure -C "%CFG%"
