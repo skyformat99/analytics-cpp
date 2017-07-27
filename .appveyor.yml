@@ -44,6 +44,11 @@ init:
   - C:\"Program Files (x86)"/%VSINSTALL%/vcvarsall.bat %MSVC_PLATFORM%
 
 before_build:
+  - git clone https://github.com/Microsoft/vcpkg C:\Projects\vcpkg
+  - c:\Projects\vcpkg\bootstrap-vcpkg.bat
+  - set VCPKG_ROOT=C:\Projects\vcpkg
+  - c:\Projects\vcpkg\vcpkg.exe integrate install
+  - c:\Projects\vcpkg\vcpkg.exe install curl
 
 build:
   parallel: true
