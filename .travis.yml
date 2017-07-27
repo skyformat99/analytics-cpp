@@ -1,11 +1,27 @@
 language: cpp
-sudo: false
+sudo: true
+dist: trusty
 matrix:
   include:
     - os: linux
-      compiler:
-        - clang
-        - gcc
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-4.9
+      env: COMPILER=g++-4.9
+    - os: linux:
+      compiler: clang
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.6
+          packages:
+            - clang-3.6
+      env: COMPILER=clang++-3.6
     - os: osx
       compiler: clang
 # we may need to install libcurl, valgrind, and the custom version of libcurl
