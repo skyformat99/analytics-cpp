@@ -32,4 +32,4 @@ macro(add_a_test NAME TIMEOUT)
     #endif()
 endmacro(add_a_test)
 
-add_a_test(test-submit 5)
+add_a_test(test-submit 20)
