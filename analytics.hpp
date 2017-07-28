@@ -128,7 +128,9 @@ namespace analytics {
         /// The amount of time to wait before retrying a post.
         std::chrono::seconds RetryInterval;
 
-        /// Default context.
+        /// Default context. We populate a default context with the
+        /// library and operating system.  This will be merged against
+        /// any other more detail context you might wish to set.
         Object Context;
 
         /// Default integrations. This must be a dictionary of string

@@ -25,6 +25,11 @@
 #include "http-none.hpp"
 #endif
 
+#ifndef _WIN32
+#include <sys/utsname.h>
+#include <unistd.h>
+#endif
+
 // To keep this simple, we include the entire implementation in this one
 // C++ file.  Organizationally we'd probably have rather split this up,
 // but having a single file to integrate makes it easier to integrate
@@ -35,6 +40,24 @@ using json = nlohmann::json;
 namespace segment {
 namespace analytics {
 
+#ifdef _WIN32
+    void getOs(std::string& name, std::string& vers)
+    {
+        // Modern Windows has deprecated old GetVersionEx(), and
+        // now we are supposed to check the version of a file
+        // such as kernel32.dll, and report on that.
+        name = "Windows";
+        vers = "";
+    }
+#else
+    void getOs(std::string& name, std::string& vers)
+    {
+        struct utsname uts;
+        (void)uname(&uts);
+        name = uts.sysname;
+        vers = uts.release;
+    }
+#endif
     std::string TimeStamp()
     {
         auto now = std::chrono::system_clock::now();
@@ -67,6 +90,26 @@ namespace analytics {
         j = ev->object;
     }
 
+    Object initContext()
+    {
+        auto context = json::object();
+        auto os = json::object();
+        auto lib = json::object();
+        std::string osname;
+        std::string osvers;
+
+        getOs(osname, osvers);
+        os["name"] = osname;
+        if (osvers != "") {
+            os["version"] = osvers;
+        }
+        lib["name"] = "analytics-cpp";
+        lib["version"] = "0.0";
+        context["os"] = os;
+        context["library"] = lib;
+        return context;
+    }
+
     Analytics::Analytics(std::string writeKey)
         : writeKey(writeKey)
     {
@@ -87,6 +130,7 @@ namespace analytics {
         FlushInterval = std::chrono::seconds(10);
         needFlush = false;
         wakeTime = std::chrono::time_point<std::chrono::system_clock>::max();
+        Context = initContext();
     }
 
     Analytics::Analytics(std::string writeKey, std::string host)
@@ -110,6 +154,7 @@ namespace analytics {
         FlushInterval = std::chrono::seconds(10);
         needFlush = false;
         wakeTime = std::chrono::time_point<std::chrono::system_clock>::max();
+        Context = initContext();
     }
 
     Analytics::~Analytics()
@@ -279,6 +324,12 @@ namespace analytics {
 
         json body;
         body["batch"] = batch;
+        if (Integrations.is_object()) {
+            body["integrations"] = Integrations;
+        }
+        if (Context.is_object()) {
+            body["context"] = Context;
+        }
 
         req.Method = "POST";
         req.URL = this->host + "/v1/batch";
