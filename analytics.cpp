@@ -15,9 +15,15 @@
 
 #include "analytics.hpp"
 #include "date.hpp"
-#include "http-curl.hpp"
-#include "http-none.hpp"
 #include "json.hpp"
+
+#ifdef SEGMENT_USE_CURL
+#include "http-curl.hpp"
+#elif defined(SEGMENT_USE_WININET)
+#include "http-wininet.hpp"
+#else
+#include "http-none.hpp"
+#endif
 
 // To keep this simple, we include the entire implementation in this one
 // C++ file.  Organizationally we'd probably have rather split this up,
@@ -39,7 +45,7 @@ namespace analytics {
 
     Event::Event(std::string type, std::string userId, std::string anonymousId, Object context, Object integrations)
     {
-        object = json::object();
+        this->object = json::object();
         object["timestamp"] = TimeStamp();
         object["type"] = type;
         if (userId != "") {
@@ -56,24 +62,22 @@ namespace analytics {
         }
     }
 
-    void to_json(json& j, const Event& ev)
-    {
-        if (ev.object.is_object()) {
-            j = ev.object;
-        }
-        j = nullptr;
-    }
-
     void to_json(json& j, std::shared_ptr<Event> ev)
     {
-        return (to_json(j, *ev));
+        j = ev->object;
     }
 
     Analytics::Analytics(std::string writeKey)
         : writeKey(writeKey)
     {
         host = "https://api.segment.io";
+#ifdef SEGMENT_USE_CURL
         Handler = std::make_shared<segment::http::HttpHandlerCurl>();
+#elif defined(SEGMENT_USE_WININET)
+        Handler = std::make_shared<segment::http::HttpHandlerWinHttp>();
+#else
+        Handler = std::make_shared<segment::http::HttpHandlerNone>();
+#endif
         thr = std::thread(worker, this);
         MaxRetries = 5;
         RetryInterval = std::chrono::seconds(1);
@@ -89,7 +93,14 @@ namespace analytics {
         : writeKey(writeKey)
         , host(host)
     {
+#ifdef SEGMENT_USE_CURL
         Handler = std::make_shared<segment::http::HttpHandlerCurl>();
+#elif defined(SEGMENT_USE_WININET)
+        Handler = std::make_shared<segment::http::HttpHandlerWinHttp>();
+#else
+        Handler = std::make_shared<segment::http::HttpHandlerNone>();
+#endif
+
         thr = std::thread(worker, this);
         MaxRetries = 5;
         RetryInterval = std::chrono::seconds(1);
@@ -105,8 +116,8 @@ namespace analytics {
     {
         FlushWait();
         std::unique_lock<std::mutex> lk(this->lock);
-        this->shutdown = true;
-        this->cv.notify_all();
+        shutdown = true;
+        flushCv.notify_one();
         lk.unlock();
 
         thr.join();
@@ -121,28 +132,29 @@ namespace analytics {
         // executing this check.
         while (!events.empty()) {
             needFlush = true;
-            cv.notify_all();
-            cv.wait(lk);
+            flushCv.notify_one();
+            emptyCv.wait(lk);
         }
     }
 
     void Analytics::Flush()
     {
-        std::unique_lock<std::mutex> lk(this->lock);
+        std::lock_guard<std::mutex> lk(this->lock);
         needFlush = true;
-        cv.notify_all();
+        flushCv.notify_one();
     }
 
     void Analytics::Scrub()
     {
-        std::unique_lock<std::mutex> lk(this->lock);
+        std::lock_guard<std::mutex> lk(this->lock);
         events.clear();
-        cv.notify_all();
+        emptyCv.notify_all();
+        flushCv.notify_one();
     }
 
     void Analytics::Track(std::string userId, std::string event, Object properties)
     {
-        this->Track(userId, "", event, properties, nullptr, nullptr);
+        Track(userId, "", event, properties, nullptr, nullptr);
     }
 
     void Analytics::Track(std::string userId, std::string anonymousId, std::string event, Object properties, Object context, Object integrations)
@@ -153,12 +165,12 @@ namespace analytics {
             e->object["properties"] = properties;
         }
 
-        this->queueEvent(e);
+        queueEvent(e);
     }
 
     void Analytics::Identify(std::string userId, Object traits)
     {
-        this->Identify(userId, "", traits, nullptr, nullptr);
+        Identify(userId, "", traits, nullptr, nullptr);
     }
 
     void Analytics::Identify(std::string userId, std::string anonymousId, Object traits, Object context, Object integrations)
@@ -167,12 +179,12 @@ namespace analytics {
         if (traits.is_object()) {
             e->object["traits"] = traits;
         }
-        this->queueEvent(e);
+        queueEvent(e);
     }
 
     void Analytics::Page(std::string name, std::string userId, Object properties)
     {
-        this->Page(name, userId, "", properties, nullptr, nullptr);
+        Page(name, userId, "", properties, nullptr, nullptr);
     }
 
     void Analytics::Page(std::string name, std::string userId, std::string anonymousId, Object properties, Object context, Object integrations)
@@ -182,7 +194,7 @@ namespace analytics {
             e->object["properties"] = properties;
         }
 
-        this->queueEvent(e);
+        queueEvent(e);
     }
     void Analytics::Screen(std::string name, std::string userId, Object properties)
     {
@@ -196,12 +208,12 @@ namespace analytics {
             e->object["properties"] = properties;
         }
 
-        this->queueEvent(e);
+        queueEvent(e);
     }
 
     void Analytics::Alias(std::string previousId, std::string userId)
     {
-        this->Alias(previousId, userId, "", nullptr, nullptr);
+        Alias(previousId, userId, "", nullptr, nullptr);
     }
 
     void Analytics::Alias(std::string previousId, std::string userId, std::string anonymousId, Object context, Object integrations)
@@ -216,7 +228,7 @@ namespace analytics {
     {
         // The docs seem to claim that a userId or anonymousId must be set,
         // but the code I've seen suggests otherwise.
-        this->Group(groupId, "", "", traits, nullptr, nullptr);
+        Group(groupId, "", "", traits, nullptr, nullptr);
     }
 
     void Analytics::Group(std::string groupId, std::string userId, std::string anonymousId, Object traits, Object context, Object integrations)
@@ -273,12 +285,15 @@ namespace analytics {
         req.Headers["User-Agent"] = "AnalyticsCPP/0.1";
         // Note: libcurl could do this for us, but for other transports
         // we do it here -- keeping the transports as unaware as possible.
-        req.Headers["Authorization"] = "Basic " + base64_encode(this->writeKey);
+        req.Headers["Authorization"] = "Basic " + base64_encode(this->writeKey + ":");
         req.Headers["Content-Type"] = "application/json";
         req.Headers["Accept"] = "application/json";
         req.Body = body.dump();
 
         auto resp = this->Handler->Handle(req);
+        if (resp->Code != 200) {
+            throw(segment::http::HttpError(resp->Code));
+        }
     }
 
     void Analytics::queueEvent(std::shared_ptr<Event> ev)
@@ -291,7 +306,7 @@ namespace analytics {
                 wakeTime = flushTime;
             }
         }
-        cv.notify_all();
+        flushCv.notify_one();
     }
 
     void Analytics::processQueue()
@@ -300,9 +315,16 @@ namespace analytics {
         bool ok;
         std::string reason;
         std::deque<std::shared_ptr<Event>> notifyq;
+        std::unique_lock<std::mutex> lk(this->lock);
 
         for (;;) {
-            std::unique_lock<std::mutex> lk(this->lock);
+            // There is a little mystery here.  Without this sleep,
+            // the Win32 system seems to get stuck; perhaps there is
+            // a subtle bug in the handling of condition variables
+            // or locks in the C++ runtime or threading libraries.
+            // POSIX systems don't seem to need it, but 10 millis
+            // is no sweat.
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             if (events.empty() && batch.empty()) {
                 // Reset failure count so we start with a clean slate.
@@ -312,7 +334,7 @@ namespace analytics {
                 wakeTime = std::chrono::time_point<std::chrono::system_clock>::max();
 
                 // We might have a flusher waiting
-                cv.notify_all();
+                emptyCv.notify_all();
 
                 // We only shut down if the queue was empty.  To force
                 // a shutdown without draining, just clear the queue
@@ -321,7 +343,7 @@ namespace analytics {
                     return;
                 }
 
-                cv.wait(lk);
+                flushCv.wait(lk);
                 continue;
             }
 
@@ -359,7 +381,7 @@ namespace analytics {
                 std::chrono::time_point_cast<std::chrono::milliseconds>(now));
 
             if ((!needFlush) && (now < wakeTime)) {
-                cv.wait_until(lk, wakeTime);
+                flushCv.wait_until(lk, wakeTime);
                 continue;
             }
 
@@ -380,7 +402,7 @@ namespace analytics {
                     if (retryTime < wakeTime) {
                         wakeTime = retryTime;
                     }
-                    cv.wait_until(lk, wakeTime);
+                    flushCv.wait_until(lk, wakeTime);
                     continue;
                 }
                 ok = false;
@@ -407,13 +429,15 @@ namespace analytics {
                             cb->Failure(ev, reason);
                         }
                     }
-                } catch (std::exception& e) {
+                } catch (std::exception&) {
                     // User supplied callback code failed.  There isn't really
                     // anything else we can do.  Muddle on.  This prevents a
                     // failure there from silently causing the processing thread
                     // to stop functioning.
                 }
             }
+
+            lk.lock();
         }
     }
 

@@ -7,27 +7,30 @@
 // found online at https://opensource.org/licenses/MIT.
 //
 
-#ifndef SEGMENT_HTTP_CURL_HPP_
-#define SEGMENT_HTTP_CURL_HPP_
+#ifndef SEGMENT_HTTP_WINHTTP_HPP_
+#define SEGMENT_HTTP_WINHTTP_HPP_
 
+#ifdef _WIN32
 #include "http.hpp"
 
 namespace segment {
 namespace http {
 
-    /// HttpCurl is an implementation of the HttpHandler API
-    /// based on libcurl.  At present it only supports POST, and it
+    /// HttpWinHttp is an implementation of the HttpHandler API
+    /// based on Windows 32 HTTP.  At present it only supports POST, and it
     /// does not actually populate the response fields or data, since
     /// they are not used by the framework.
-    class HttpHandlerCurl : public HttpHandler {
+    class HttpHandlerWinHttp : public HttpHandler {
 
     public:
-        HttpHandlerCurl(){};
-        ~HttpHandlerCurl(){};
-        std::shared_ptr<HttpResponse> Handle(const HttpRequest& req);
+        HttpHandlerWinHttp();
+        virtual ~HttpHandlerWinHttp(){};
+        virtual std::shared_ptr<HttpResponse> Handle(const HttpRequest& req);
     };
 
 } // namespace http
 } // namespace segment
 
-#endif // SEGMENT_HTTP_CURL_HPP_
+#endif // SEGMENT_HTTP_WINHTTP_HPP_
+
+#endif _WIN32
