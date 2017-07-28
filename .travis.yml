@@ -13,6 +13,8 @@ matrix:
         - COMPILER_NAME=gcc
         - CC=gcc-4.9
         - CXX=g++-4.9
+	- BUILD_TYPE=Debug
+        - TEST_TARGET=test
 
     - os: linux
       addons:
@@ -25,6 +27,28 @@ matrix:
         - COMPILER_NAME=clang
         - CC=clang-4.0
         - CXX=clang++-4.0
+	- BUILD_TYPE=Debug
+        - TEST_TARGET=test
+
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-4.9
+      env:
+        - COMPILER_NAME=gcc
+        - CC=gcc-4.9
+        - CXX=g++-4.9
+        - COVERAGE_CMAKE=-DCOVERALLS=ON
+	- BUILD_TYPE=Debug
+        - TEST_TARGET=coveralls
+
+    - os: linux
+      env:
+        - BUILD_TYPE=Debug
+        - TEST_TARGET=test
 
     - os: osx
       compiler: clang
@@ -35,6 +59,6 @@ script:
   - cmake --version
   - mkdir build
   - cd build
-  - cmake ..
-  - cmake --build . -- -j4
-  - ctest --output-on-failure -C Debug
+  - cmake -C ${BUILD_TYPE} ${COVERAGE_CMAKE} ..
+  - make
+  - make ${TEST_TARGET}
