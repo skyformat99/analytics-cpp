@@ -8,9 +8,9 @@
 Build status on Garrett's Branch:
 ---------------------------------
 
-[![Linux Status](https://img.shields.io/travis/segementio/analytics-cpp/garrett.svg?label=linux)](https://travis-ci.org/segmentio/analytics-cpp)
+[![Linux Status](https://img.shields.io/travis/gdamore/analytics-cpp/garrett.svg?label=linux)](https://travis-ci.org/segmentio/analytics-cpp)
 [![Windows Status](https://img.shields.io/appveyor/ci/gdamore/analytics-cpp/garrett.svg?label=windows)](https://ci.appveyor.com/project/gdamore/analytics-cpp)
- [![Test Coverage](https://coveralls.io/repos/gdamore/analytics-cpp/badge.svg?branch=garrett)](https://coveralls.io/r/gdamore/analytics-cpp)
+ [![Test Coverage](https://coveralls.io/repos/gdamore/analytics-cpp/badge.svg?branch=coverall)](https://coveralls.io/r/gdamore/analytics-cpp)
 
 A quick & dirty C++ implementation for sending analytics events to Segment.
 This requires C++11, which means GCC 4.9 or newer; recent clang and MSVC 2015
