@@ -8,7 +8,7 @@
 Build status on Garrett's Branch:
 ---------------------------------
 
-[![Linux Status](https://img.shields.io/travis/gdamore/analytics-cpp/garrett.svg?label=linux)](https://travis-ci.org/segmentio/analytics-cpp)
+[![Linux/Mac Status](https://travis-ci.org/segmentio/analytics-cpp.svg?branch=garrett)](https://travis-ci.org/gdamore/analytics-cpp)
 [![Windows Status](https://img.shields.io/appveyor/ci/gdamore/analytics-cpp/garrett.svg?label=windows)](https://ci.appveyor.com/project/gdamore/analytics-cpp)
  [![Test Coverage](https://coveralls.io/repos/gdamore/analytics-cpp/badge.svg?branch=coverall)](https://coveralls.io/r/gdamore/analytics-cpp)
 
