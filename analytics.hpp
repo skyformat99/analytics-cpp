@@ -110,7 +110,7 @@ namespace analytics {
 
         /// FlushCount is the maximum number of messages to hold before flushing.
         /// Changing this value is not recommended.
-        int FlushCount;
+        size_t FlushCount;
 
         /// FlushSize is the upper bound on batch size before we flush to the
         /// network.  This is actuallly a count in bytes; the entire marshalled
@@ -158,7 +158,8 @@ namespace analytics {
         std::string host;
 
         std::mutex lock;
-        std::condition_variable cv;
+        std::condition_variable emptyCv;
+        std::condition_variable flushCv;
         std::thread thr;
         std::deque<std::shared_ptr<Event>> events;
         std::deque<std::shared_ptr<Event>> batch;

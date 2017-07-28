@@ -13,7 +13,9 @@
 #include <mutex>
 #include <thread>
 
+#ifdef SEGMENT_USE_CURL
 #include <curl/curl.h> // So that we can clean up memory at the end.
+#endif
 
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
@@ -24,20 +26,21 @@ class myTestCB : public Callback {
 public:
     void Success(std::shared_ptr<Event> ev)
     {
+        std::lock_guard<std::mutex> l(lk);
         success++;
-        Wake();
+        wake();
     }
 
-    void Failure(std::shared_ptr<Event> ev, std::string reason)
-    {
-        last_reason = reason;
-        fail++;
-        Wake();
-    }
-
-    void Wake()
+    void Failure(std::shared_ptr<Event> ev, const std::string reason)
     {
         std::lock_guard<std::mutex> l(lk);
+        last_reason = reason;
+        fail++;
+        wake();
+    }
+
+    void wake()
+    {
         count++;
         cv.notify_all();
     }
@@ -98,7 +101,6 @@ TEST_CASE("Submissions to Segment work", "[analytics]")
             std::this_thread::sleep_for(std::chrono::seconds(1));
             analytics.Track("batch3", "Third", { { "abc", "567" } });
             //            analytics.Flush();
-
             cb->Wait(3);
             analytics.FlushWait();
             REQUIRE(cb->fail == 0);
@@ -194,12 +196,16 @@ TEST_CASE("Submissions to Segment work", "[analytics]")
 
 int main(int argc, char* argv[])
 {
+#if defined(SEGMENT_USE_CURL)
     // Technically we don't have to init curl, but doing so ensures that
     // any global libcurl leaks are blamed on libcurl in valgrind runs.
     curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
 
     int result = Catch::Session().run(argc, argv);
 
+#if defined(SEGMENT_USE_CURL)
     curl_global_cleanup();
+#endif
     return (result < 0xff ? result : 0xff);
 }
