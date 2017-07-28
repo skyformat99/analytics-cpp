@@ -2,8 +2,13 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/segmentio/analytics-cpp/blob/master/LICENSE)
 [![Linux Status](https://img.shields.io/travis/segementio/analytics-cpp/master.svg?label=linux)](https://travis-ci.org/segmentio/analytics-cpp)
-[//]: Fixme [![Windows Status](https://img.shields.io/appveyor/ci/segmentio/analytics-cpp/master.svg?label=windows)](https://ci.appveyor.com/project/segmentio/analytics-cpp)
-[![Windows Status](https://img.shields.io/appveyor/ci/gdamore/analytics-cpp/master.svg?label=windows)](https://ci.appveyor.com/project/gdamore/analytics-cpp)
+[![Windows Status](https://img.shields.io/appveyor/ci/segmentio/analytics-cpp/master.svg?label=windows)](https://ci.appveyor.com/project/segmentio/analytics-cpp)
+
+Build status on Garrett's Branch:
+---------------------------------
+
+[![Linux Status](https://img.shields.io/travis/segementio/analytics-cpp/garrett.svg?label=linux)](https://travis-ci.org/segmentio/analytics-cpp)
+[![Windows Status](https://img.shields.io/appveyor/ci/gdamore/analytics-cpp/garrett.svg?label=windows)](https://ci.appveyor.com/project/gdamore/analytics-cpp)
 
 A quick & dirty C++ implementation for sending analytics events to Segment.
 This requires C++11, which means GCC 4.9 or newer; recent clang and MSVC 2015
